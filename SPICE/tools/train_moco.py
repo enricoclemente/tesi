@@ -376,7 +376,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         end = time.time()
 
         running_loss += loss.item()
-        running_accuracy += acc1[1]
+        running_accuracy += acc1[0]
         if i % args.print_freq == 0:
             progress.display(i)
             writer.add_scalar('minibatches training loss',
@@ -390,7 +390,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
                         loss.item(),
                         epoch)
             writer.add_scalar('epoch training acc1',
-                        acc1[1],
+                        acc1[0],
                         epoch)
             writer.add_scalar('epoch training loss avg',
                         losses.get_avg(),
