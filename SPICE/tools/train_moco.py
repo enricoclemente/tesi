@@ -22,6 +22,7 @@ import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
 import torchvision.models as models
+from torch.utils.tensorboard import SummaryWriter
 from spice.model.feature_modules.cluster_resnet import ClusterResNet
 from spice.model.feature_modules.resnet_stl import resnet18
 from spice.model.feature_modules.resnet_cifar import resnet18_cifar
@@ -45,7 +46,9 @@ parser.add_argument('--all', default=1, type=int,
 parser.add_argument('--img_size', default=96, type=int,
                     help='image size')
 parser.add_argument('--save_folder', metavar='DIR', default='./results/stl10/moco',
-                    help='path to dataset')
+                    help='path to results')
+parser.add_argument('--logs_folder', metavar='DIR', default='./results/stl10/moco/logs',
+                    help='path to tensorboard logs')
 parser.add_argument('--save-freq', default=1, type=int, metavar='N',
                     help='frequency of saving model')
 parser.add_argument('--arch', metavar='ARCH', default='clusterresnet')
@@ -296,8 +299,9 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, epoch, args)
 
+        writer = SummaryWriter(args.logs_folder)
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args)
+        train(train_loader, model, criterion, optimizer, epoch, writer, args)
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
@@ -325,7 +329,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 }, is_best=False, filename='{}/checkpoint_final.pth.tar'.format(args.save_folder))
 
 
-def train(train_loader, model, criterion, optimizer, epoch, args):
+def train(train_loader, model, criterion, optimizer, epoch, writer,args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -336,10 +340,12 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         [batch_time, data_time, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch))
 
+
     # switch to train mode
     model.train()
 
     end = time.time()
+    running_loss = 0.0
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -368,8 +374,13 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         batch_time.update(time.time() - end)
         end = time.time()
 
+        running_loss += loss.item()
         if i % args.print_freq == 0:
             progress.display(i)
+            writer.add_scalar('training loss',
+                        running_loss / args.print_freq,
+                        epoch * len(train_loader) + i)
+
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
