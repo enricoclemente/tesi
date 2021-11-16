@@ -346,6 +346,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
 
     end = time.time()
     running_loss = 0.0
+    running_accuracy = 0.0
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -375,11 +376,29 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         end = time.time()
 
         running_loss += loss.item()
+        running_accuracy += acc1[1]
         if i % args.print_freq == 0:
             progress.display(i)
-            writer.add_scalar('training loss',
+            writer.add_scalar('minibatches training loss',
                         running_loss / args.print_freq,
                         epoch * len(train_loader) + i)
+            writer.add_scalar('minibatches training acc1',
+                        running_accuracy / args.print_freq,
+                        epoch * len(train_loader) + i)
+        if i == 0:
+            writer.add_scalar('epoch training loss',
+                        loss.item(),
+                        epoch)
+            writer.add_scalar('epoch training acc1',
+                        acc1[1],
+                        epoch)
+            writer.add_scalar('epoch training loss avg',
+                        losses.get_avg(),
+                        epoch)
+            writer.add_scalar('epoch training acc1 avg',
+                        top1.get_avg(),
+                        epoch)
+
 
 
 
@@ -407,6 +426,9 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+    
+    def get_avg(self):
+        return self.avg
 
     def __str__(self):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
