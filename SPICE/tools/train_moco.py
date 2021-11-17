@@ -386,23 +386,17 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         running_batch_time += (time.time() - end)
         end = time.time()
 
-        running_loss += loss.item()
-        running_accuracy1 += acc1[0]
-        running_accuracy5 += acc5[0]
         if i % args.print_freq == 0:
             progress.display(i)
             writer.add_scalar('Training Loss/minibatches loss',
-                        running_loss / args.print_freq,
+                        losses.get_avg(),
                         epoch * len(train_loader) + i)
             writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
-                        running_accuracy1 / args.print_freq,
+                        top1.get_avg(),
                         epoch * len(train_loader) + i)
             writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
-                        running_accuracy5 / args.print_freq,
+                        top5.get_avg(),
                         epoch * len(train_loader) + i)
-            running_loss = 0.0
-            running_accuracy1 = 0.0
-            running_accuracy5 = 0.0
 
     # statistics to be written at the end of every epoch
     writer.add_scalar('Training Loss/epoch loss',
