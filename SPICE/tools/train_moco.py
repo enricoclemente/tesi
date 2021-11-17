@@ -240,6 +240,7 @@ def main_worker(gpu, ngpus_per_node, args):
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
+            print("=> last metrics where: '{}'".format(checkpoint['metrics']))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
@@ -303,8 +304,9 @@ def main_worker(gpu, ngpus_per_node, args):
         adjust_learning_rate(optimizer, epoch, args)
 
         writer = SummaryWriter(args.logs_folder + "/" + args.run_id)
+        
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, writer, args)
+        metrics = train(train_loader, model, criterion, optimizer, epoch, writer, args)
 
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0):
@@ -314,6 +316,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     'arch': args.arch,
                     'state_dict': model.state_dict(),
                     'optimizer' : optimizer.state_dict(),
+                    'metrics' : metrics,
                 }, is_best=False, filename='{}/checkpoint_{:04d}.pth.tar'.format(args.save_folder, epoch))
 
                 save_checkpoint({
@@ -321,6 +324,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     'arch': args.arch,
                     'state_dict': model.state_dict(),
                     'optimizer' : optimizer.state_dict(),
+                    'metrics' : metrics,
                 }, is_best=False, filename='{}/checkpoint_last.pth.tar'.format(args.save_folder))
 
             if (epoch+1) == args.epochs:
@@ -329,6 +333,7 @@ def main_worker(gpu, ngpus_per_node, args):
                     'arch': args.arch,
                     'state_dict': model.state_dict(),
                     'optimizer' : optimizer.state_dict(),
+                    'metrics' : metrics,
                 }, is_best=False, filename='{}/checkpoint_final.pth.tar'.format(args.save_folder))
 
 
@@ -386,13 +391,13 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         running_accuracy5 += acc5[0]
         if i % args.print_freq == 0:
             progress.display(i)
-            writer.add_scalar('Loss/minibatches training loss',
+            writer.add_scalar('Training Loss/minibatches loss',
                         running_loss / args.print_freq,
                         epoch * len(train_loader) + i)
-            writer.add_scalar('Accuracy/minibatches training acc1',
+            writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
                         running_accuracy1 / args.print_freq,
                         epoch * len(train_loader) + i)
-            writer.add_scalar('Accuracy/minibatches training acc5',
+            writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
                         running_accuracy5 / args.print_freq,
                         epoch * len(train_loader) + i)
             running_loss = 0.0
@@ -400,27 +405,24 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
             running_accuracy5 = 0.0
 
     # statistics to be written at the end of every epoch
-    writer.add_scalar('Loss/epoch training loss',
-                loss.item(),
-                epoch)
-    writer.add_scalar('Accuracy/epoch training acc1',
-                acc1[0],
-                epoch)
-    writer.add_scalar('Accuracy/epoch training acc5',
-                acc5[0],
-                epoch)
-    writer.add_scalar('Loss/epoch training loss avg',
+    writer.add_scalar('Training Loss/epoch loss',
                 losses.get_avg(),
                 epoch)
-    writer.add_scalar('Accuracy/epoch training acc1 avg',
+    writer.add_scalar('Training Accuracy/epoch top1 accuracy',
                 top1.get_avg(),
                 epoch)
-    writer.add_scalar('Accuracy/epoch training acc5 avg',
+    writer.add_scalar('Training Accuracy/epoch top5 accuracy',
                 top5.get_avg(),
                 epoch)
-    writer.add_scalar('Time/batch time',
+    writer.add_scalar('Training Time/batch time',
                 running_batch_time,
                 epoch)
+    metrics = {
+            "loss" : losses.get_avg(),
+            "top1": top1.get_avg(),
+            "top5": top5.get_avg()
+        }
+    return metrics
 
 
 
