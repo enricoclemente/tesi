@@ -117,7 +117,8 @@ parser.add_argument('--cos', action='store_false',
 
 def main():
     args = parser.parse_args()
-
+    print("train moco started with params")
+    print(args)
     if not os.path.exists(args.save_folder):
         os.makedirs(args.save_folder)
 
