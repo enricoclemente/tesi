@@ -49,6 +49,8 @@ parser.add_argument('--save_folder', metavar='DIR', default='./results/stl10/moc
                     help='path to results')
 parser.add_argument('--logs_folder', metavar='DIR', default='./results/stl10/moco/logs',
                     help='path to tensorboard logs')
+parser.add_argument('--run_id', default='exp1',
+                    help='id for creating tensorboard folder')
 parser.add_argument('--save-freq', default=1, type=int, metavar='N',
                     help='frequency of saving model')
 parser.add_argument('--arch', metavar='ARCH', default='clusterresnet')
@@ -299,7 +301,7 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, epoch, args)
 
-        writer = SummaryWriter(args.logs_folder)
+        writer = SummaryWriter(args.logs_folder + "/" + args.run_id)
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, writer, args)
 
@@ -348,6 +350,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
     running_loss = 0.0
     running_accuracy1 = 0.0
     running_accuracy5 = 0.0
+    running_batch_time = 0.0
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -374,6 +377,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
 
         # measure elapsed time
         batch_time.update(time.time() - end)
+        running_batch_time += (time.time() - end)
         end = time.time()
 
         running_loss += loss.item()
@@ -390,27 +394,32 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
             writer.add_scalar('Accuracy/minibatches training acc5',
                         running_accuracy5 / args.print_freq,
                         epoch * len(train_loader) + i)
-        if i % (len(train_loader) -1) == 0:
-            # statistics to be written at the end of every epoch
-            writer.add_scalar('Loss/epoch training loss',
-                        loss.item(),
-                        epoch)
-            writer.add_scalar('Accuracy/epoch training acc1',
-                        acc1[0],
-                        epoch)
-            writer.add_scalar('Accuracy/epoch training acc5',
-                        acc5[0],
-                        epoch)
-            writer.add_scalar('Loss/epoch training loss avg',
-                        losses.get_avg(),
-                        epoch)
-            writer.add_scalar('Accuracy/epoch training acc1 avg',
-                        top1.get_avg(),
-                        epoch)
-            writer.add_scalar('Accuracy/epoch training acc5 avg',
-                        top5.get_avg(),
-                        epoch)
+            running_loss = 0.0
+            running_accuracy1 = 0.0
+            running_accuracy5 = 0.0
 
+    # statistics to be written at the end of every epoch
+    writer.add_scalar('Loss/epoch training loss',
+                loss.item(),
+                epoch)
+    writer.add_scalar('Accuracy/epoch training acc1',
+                acc1[0],
+                epoch)
+    writer.add_scalar('Accuracy/epoch training acc5',
+                acc5[0],
+                epoch)
+    writer.add_scalar('Loss/epoch training loss avg',
+                losses.get_avg(),
+                epoch)
+    writer.add_scalar('Accuracy/epoch training acc1 avg',
+                top1.get_avg(),
+                epoch)
+    writer.add_scalar('Accuracy/epoch training acc5 avg',
+                top5.get_avg(),
+                epoch)
+    writer.add_scalar('Time/batch time',
+                running_batch_time,
+                epoch)
 
 
 
