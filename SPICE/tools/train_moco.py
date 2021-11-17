@@ -353,9 +353,6 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
     model.train()
 
     end = time.time()
-    running_loss = 0.0
-    running_accuracy1 = 0.0
-    running_accuracy5 = 0.0
     running_batch_time = 0.0
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
@@ -372,9 +369,9 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        losses.update(loss.item(), images[0].size(0))
-        top1.update(acc1[0], images[0].size(0))
-        top5.update(acc5[0], images[0].size(0))
+        losses.update(loss.item())
+        top1.update(acc1[0])
+        top5.update(acc5[0])
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -388,6 +385,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
 
         if i % args.print_freq == 0:
             progress.display(i)
+            print("writing minibatch on tensorboard")
             writer.add_scalar('Training Loss/minibatches loss',
                         losses.get_avg(),
                         epoch * len(train_loader) + i)
@@ -399,6 +397,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
                         epoch * len(train_loader) + i)
 
     # statistics to be written at the end of every epoch
+    print("writing epoch metrics on tensorboard")
     writer.add_scalar('Training Loss/epoch loss',
                 losses.get_avg(),
                 epoch)
@@ -409,8 +408,8 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
                 top5.get_avg(),
                 epoch)
     writer.add_scalar('Training Time/batch time',
-                running_batch_time,
-                epoch)
+                batch_time.get_sum(),
+                epoch)        
     metrics = {
             "loss" : losses.get_avg(),
             "top1": top1.get_avg(),
@@ -447,6 +446,9 @@ class AverageMeter(object):
     
     def get_avg(self):
         return self.avg
+    
+    def get_sum(self):
+        return self.sum
 
     def __str__(self):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
