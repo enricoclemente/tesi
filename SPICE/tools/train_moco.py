@@ -346,7 +346,8 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
 
     end = time.time()
     running_loss = 0.0
-    running_accuracy = 0.0
+    running_accuracy1 = 0.0
+    running_accuracy5 = 0.0
     for i, (images, _) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -376,27 +377,38 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         end = time.time()
 
         running_loss += loss.item()
-        running_accuracy += acc1[0]
+        running_accuracy1 += acc1[0]
+        running_accuracy5 += acc5[0]
         if i % args.print_freq == 0:
             progress.display(i)
-            writer.add_scalar('minibatches training loss',
+            writer.add_scalar('Loss/minibatches training loss',
                         running_loss / args.print_freq,
                         epoch * len(train_loader) + i)
-            writer.add_scalar('minibatches training acc1',
-                        running_accuracy / args.print_freq,
+            writer.add_scalar('Accuracy/minibatches training acc1',
+                        running_accuracy1 / args.print_freq,
                         epoch * len(train_loader) + i)
-        if i == 0:
-            writer.add_scalar('epoch training loss',
+            writer.add_scalar('Accuracy/minibatches training acc5',
+                        running_accuracy5 / args.print_freq,
+                        epoch * len(train_loader) + i)
+        if i % (len(train_loader) -1) == 0:
+            # statistics to be written at the end of every epoch
+            writer.add_scalar('Loss/epoch training loss',
                         loss.item(),
                         epoch)
-            writer.add_scalar('epoch training acc1',
+            writer.add_scalar('Accuracy/epoch training acc1',
                         acc1[0],
                         epoch)
-            writer.add_scalar('epoch training loss avg',
+            writer.add_scalar('Accuracy/epoch training acc5',
+                        acc5[0],
+                        epoch)
+            writer.add_scalar('Loss/epoch training loss avg',
                         losses.get_avg(),
                         epoch)
-            writer.add_scalar('epoch training acc1 avg',
+            writer.add_scalar('Accuracy/epoch training acc1 avg',
                         top1.get_avg(),
+                        epoch)
+            writer.add_scalar('Accuracy/epoch training acc5 avg',
+                        top5.get_avg(),
                         epoch)
 
 
