@@ -70,6 +70,19 @@ class MoCo(nn.Module):
         self.queue_ptr[0] = ptr
 
     @torch.no_grad()
+    def _dequeue_and_enqueue_single_gpu(self, keys):
+        batch_size = keys.shape[0]
+
+        ptr = int(self.queue_ptr)
+        assert self.K % batch_size == 0  # for simplicity
+
+        # replace the keys at ptr (dequeue and enqueue)
+        self.queue[:, ptr:ptr + batch_size] = keys.t()  # transpose
+        ptr = (ptr + batch_size) % self.K  # move pointer
+
+        self.queue_ptr[0] = ptr
+
+    @torch.no_grad()
     def _batch_shuffle_ddp(self, x):
         """
         Batch shuffle, for making use of BatchNorm.
@@ -158,7 +171,7 @@ class MoCo(nn.Module):
                 # if using single-gpu shuffling and unshuffling related methods are called,
                 # implementation taken from 
                 # https://colab.research.google.com/github/facebookresearch/moco/blob/colab-notebook/colab/moco_cifar10_demo.ipynb#scrollTo=lzFyFnhbk8hj
-                
+
                 # shuffle for making use of BN
                 im_k, idx_unshuffle = self._batch_shuffle_single_gpu(im_k)
 
@@ -194,7 +207,10 @@ class MoCo(nn.Module):
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
         # dequeue and enqueue
-        self._dequeue_and_enqueue(k)
+        if self.single_gpu:
+            self._dequeue_and_enqueue_single_gpu(k)
+        else:
+            self._dequeue_and_enqueue(k)
 
         return logits, labels
 

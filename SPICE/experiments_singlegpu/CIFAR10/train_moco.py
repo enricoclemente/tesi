@@ -101,7 +101,7 @@ def main_worker(args):
     # creating model MoCo using resnet18_cifar which is an implementation adapted for CIFAR10
     model = moco.builder.MoCo(
         base_encoder=resnet18_cifar,
-        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32)
+        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
     print(model)
 
     torch.cuda.set_device(torch.cuda.current_device())
@@ -190,7 +190,7 @@ def main_worker(args):
         if (epoch+1) % args.save_freq == 0:
             save_checkpoint({
                 'epoch': epoch + 1,
-                'arch': args.arch,
+                'arch': 'resnet18',
                 'state_dict': model.state_dict(),
                 'optimizer' : optimizer.state_dict(),
                 'metrics' : metrics,
@@ -198,7 +198,7 @@ def main_worker(args):
 
             save_checkpoint({
                 'epoch': epoch + 1,
-                'arch': args.arch,
+                'arch': 'resnet18',
                 'state_dict': model.state_dict(),
                 'optimizer' : optimizer.state_dict(),
                 'metrics' : metrics,
@@ -207,7 +207,7 @@ def main_worker(args):
         if (epoch+1) == args.epochs:
             save_checkpoint({
                 'epoch': epoch + 1,
-                'arch': args.arch,
+                'arch': 'resnet18',
                 'state_dict': model.state_dict(),
                 'optimizer' : optimizer.state_dict(),
                 'metrics' : metrics,
