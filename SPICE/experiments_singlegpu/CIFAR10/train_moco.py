@@ -238,8 +238,8 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
             # just want to display a pair of images in order to track training samples
             img1 = images[0][0] / 2 + 0.5     # unnormalize
             img2 = images[1][0] / 2 + 0.5     # unnormalize
-            writer.add_images("Training examples/epoch 1 image1",img1)  
-            writer.add_images("Training examples/epoch 1 image12",img2)  
+            writer.add_image("Training examples/epoch 1 image1",img1)  
+            writer.add_image("Training examples/epoch 1 image12",img2)  
         
         images[0] = images[0].cuda(non_blocking=True)
         images[1] = images[1].cuda(non_blocking=True)
