@@ -90,7 +90,7 @@ parser.add_argument('--seed', default=None, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu', default=None, type=int,
                     help='GPU id to use.')
-parser.add_argument('--multiprocessing-distributed', action='store_false',
+parser.add_argument('--multiprocessing-distributed', action='store_true',
                     help='Use multi-processing distributed training to launch '
                          'N processes per node, which has N GPUs. This is the '
                          'fastest way to use PyTorch for either single node or '
@@ -107,11 +107,11 @@ parser.add_argument('--moco-t', default=0.2, type=float,
                     help='softmax temperature (default: 0.07)')
 
 # options for moco v2
-parser.add_argument('--mlp', action='store_false',
+parser.add_argument('--mlp', action='store_true',
                     help='use mlp head')
-parser.add_argument('--aug-plus', action='store_false',
+parser.add_argument('--aug-plus', action='store_true',
                     help='use moco v2 data augmentation')
-parser.add_argument('--cos', action='store_false',
+parser.add_argument('--cos', action='store_true',
                     help='use cosine lr schedule')
 
 
@@ -122,6 +122,7 @@ def main():
     if not os.path.exists(args.save_folder):
         os.makedirs(args.save_folder)
 
+    print("setting seed training")
     if args.seed is not None:
         random.seed(args.seed)
         torch.manual_seed(args.seed)
@@ -131,21 +132,32 @@ def main():
                       'which can slow down your training considerably! '
                       'You may see unexpected behavior when restarting '
                       'from checkpoints.')
+    else:
+        print("seed training not set")
+    
 
     if args.gpu is not None:
         warnings.warn('You have chosen a specific GPU. This will completely '
                       'disable data parallelism.')
+    else:
+        print("GPU not set")
+
 
     if args.dist_url == "env://" and args.world_size == -1:
         args.world_size = int(os.environ["WORLD_SIZE"])
+        print("calculated world_size: {}".format(args.world_size))
 
     args.distributed = args.world_size > 1 or args.multiprocessing_distributed
 
     ngpus_per_node = torch.cuda.device_count()
+    print("ngpus_per_node: {}".format(ngpus_per_node))
+
     if args.multiprocessing_distributed:
+        print("setting multiprocessing distributed training")
         # Since we have ngpus_per_node processes per node, the total world_size
         # needs to be adjusted accordingly
         args.world_size = ngpus_per_node * args.world_size
+        print("calculated world_size: {}".format(args.world_size))
         # Use torch.multiprocessing.spawn to launch distributed processes: the
         # main_worker process function
         mp.spawn(main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
@@ -303,6 +315,7 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler.set_epoch(epoch)
         adjust_learning_rate(optimizer, epoch, args)
 
+        # tensorboard plotter
         writer = SummaryWriter(args.logs_folder + "/" + args.run_id)
         
         # train for one epoch

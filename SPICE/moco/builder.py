@@ -8,26 +8,28 @@ class MoCo(nn.Module):
     Build a MoCo model with: a query encoder, a key encoder, and a queue
     https://arxiv.org/abs/1911.05722
     """
-    def __init__(self, base_encoder, dim=128, K=65536, m=0.999, T=0.07, mlp=False, input_size=96):
+    def __init__(self, base_encoder, dim=128, K=65536, m=0.999, T=0.07, mlp=False, input_size=96, single_gpu=False):
         """
         dim: feature dimension (default: 128)
         K: queue size; number of negative keys (default: 65536)
         m: moco momentum of updating key encoder (default: 0.999)
         T: softmax temperature (default: 0.07)
+        mlp: if to use mlp head instead of fc head (MoCov2)
+        input_size: not yet discovered, for resnet_cifar architecture is useless
         """
         super(MoCo, self).__init__()
 
         self.K = K
         self.m = m
         self.T = T
-
+        self.single_gpu = single_gpu
         # create the encoders
         # num_classes is the output fc dimension
         self.encoder_q = base_encoder(num_classes=dim, in_size=input_size)
         self.encoder_k = base_encoder(num_classes=dim, in_size=input_size)
 
         if mlp:  # hack: brute-force replacement
-            dim_mlp = self.encoder_q.fc.weight.shape[1]
+            dim_mlp = self.encoder_q.fc.in_features
             self.encoder_q.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_q.fc)
             self.encoder_k.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), self.encoder_k.fc)
 
@@ -36,7 +38,7 @@ class MoCo(nn.Module):
             param_k.requires_grad = False  # not update by gradient
 
         # create the queue
-        self.register_buffer("queue", torch.randn(dim, K))
+        self.register_buffer("queue", torch.randn(dim, K)) # metodo pytorch per salvare dati che non devono essere ottimizzati nel modello
         self.queue = nn.functional.normalize(self.queue, dim=0)
 
         self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))
@@ -114,6 +116,26 @@ class MoCo(nn.Module):
 
         return x_gather[idx_this]
 
+    @torch.no_grad()
+    def _batch_shuffle_single_gpu(self, x):
+        """
+        Batch shuffle, for making use of BatchNorm.
+        """
+        # random shuffle index
+        idx_shuffle = torch.randperm(x.shape[0]).cuda()
+
+        # index for restoring
+        idx_unshuffle = torch.argsort(idx_shuffle)
+
+        return x[idx_shuffle], idx_unshuffle
+
+    @torch.no_grad()
+    def _batch_unshuffle_single_gpu(self, x, idx_unshuffle):
+        """
+        Undo batch shuffle.
+        """
+        return x[idx_unshuffle]
+
     def forward(self, im_q, im_k):
         """
         Input:
@@ -127,18 +149,33 @@ class MoCo(nn.Module):
         q = self.encoder_q(im_q)  # queries: NxC
         q = nn.functional.normalize(q, dim=1)
 
+
         # compute key features
         with torch.no_grad():  # no gradient to keys
             self._momentum_update_key_encoder()  # update the key encoder
+            
+            if self.single_gpu:
+                # if using single-gpu shuffling and unshuffling related methods are called,
+                # implementation taken from 
+                # https://colab.research.google.com/github/facebookresearch/moco/blob/colab-notebook/colab/moco_cifar10_demo.ipynb#scrollTo=lzFyFnhbk8hj
+                
+                # shuffle for making use of BN
+                im_k, idx_unshuffle = self._batch_shuffle_single_gpu(im_k)
 
-            # shuffle for making use of BN
-            im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)
+                k = self.encoder_k(im_k)  # keys: NxC
+                k = nn.functional.normalize(k, dim=1)
 
-            k = self.encoder_k(im_k)  # keys: NxC
-            k = nn.functional.normalize(k, dim=1)
+                # undo shuffle
+                k = self._batch_unshuffle_single_gpu(k, idx_unshuffle)
+            else:
+                # shuffle for making use of BN
+                im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)
 
-            # undo shuffle
-            k = self._batch_unshuffle_ddp(k, idx_unshuffle)
+                k = self.encoder_k(im_k)  # keys: NxC
+                k = nn.functional.normalize(k, dim=1)
+
+                # undo shuffle
+                k = self._batch_unshuffle_ddp(k, idx_unshuffle)
 
         # compute logits
         # Einstein sum is more intuitive
