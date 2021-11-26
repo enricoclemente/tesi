@@ -24,7 +24,7 @@ from spice.model.feature_modules.resnet_cifar import resnet18_cifar
 import moco.loader
 import moco.builder
 from torchvision.datasets import CIFAR10
-from .CIFAR10_custom import CIFAR10Pair
+from CIFAR10_custom import CIFAR10Pair
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -80,6 +80,11 @@ parser.add_argument('--mlp', action='store_true',
                     help='use mlp head')
 parser.add_argument('--cos', action='store_true',
                     help='use cosine lr schedule')
+
+# knn monitor
+parser.add_argument('--knn-k', default=200, type=int, help='k in kNN monitor')
+parser.add_argument('--knn-t', default=0.1, type=float, help='softmax temperature in kNN monitor; could be different with moco-t')
+
 
 
 def main():
@@ -152,21 +157,28 @@ def main_worker(args):
         CIFAR10_normalization
     ]
     
-    # creating CIFAR10 train dataset from custom CIFAR10 class
+    # creating CIFAR10 train and test dataset from custom CIFAR10 class
     train_dataset = CIFAR10Pair(root=args.dataset_folder, train=True, 
         transform=transforms.Compose(mocov2_augmentation), 
         download=True)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True, drop_last=True)
-
-    # creating CIFAR10 test dataset, here we need only to apply simple normalization
-    test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
-        transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalization]), 
+    test_dataset = CIFAR10Pair(root=args.dataset_folder, train=False, 
+        transform=transforms.Compose(mocov2_augmentation), 
         download=True)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+        pin_memory=True)
+
+
+    # creating CIFAR10 datasets for knn test, here we need only to apply simple normalization
+    knn_test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
+        transform=transforms.Compose([transforms.ToTensor(),
+                                    CIFAR10_normalization]), 
+        download=True)
+    knn_test_loader = torch.utils.data.DataLoader(
+        knn_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
         pin_memory=True)
 
     memory_data = CIFAR10(root='data', train=True, 
@@ -180,7 +192,8 @@ def main_worker(args):
 
     # tensorboard plotter
     train_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/train")
-    eval_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/eval")
+    test_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/test")
+    knn_test_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/knn_test")
 
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, epoch, args)
@@ -188,9 +201,12 @@ def main_worker(args):
         # train for one epoch
         metrics = train(train_loader, model, criterion, optimizer, epoch, train_writer, args)
 
-        test_acc_1 = test(model.encoder_q, memory_loader, test_loader, epoch, eval_writer, args)
+        test_acc1, test_acc5 = test(model, test_loader, epoch, test_writer, args)
+        metrics['test_acc@1'] = test_acc1
+        metrics['test_acc@5'] = test_acc5
 
-        metrics['eval_acc@1'] = test_acc_1
+        knn_test_acc1 = knn_test(model.encoder_q, memory_loader, knn_test_loader, epoch, knn_test_writer, args)
+        metrics['knn_test_acc@1'] = knn_test_acc1
 
         if (epoch+1) % args.save_freq == 0:
             save_checkpoint({
@@ -239,7 +255,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         # measure data loading time
         data_time.update(time.time() - end)
         
-        if epoch == 1:
+        if epoch == 0 and i == 0:
             # first check
             print("batches dimensions")
             print(img1.size())
@@ -280,7 +296,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
             writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
                         top5.get_avg(),
                         epoch * len(train_loader) + i)
-                        
+
     progress.display(i)
     # statistics to be written at the end of every epoch
     # print("writing epoch metrics on tensorboard")
@@ -303,8 +319,45 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         }
     return metrics
 
+
+def test(model, test_data_loader, epoch, writer, args):
+    top1 = AverageMeter('Acc@1', ':6.2f')
+    top5 = AverageMeter('Acc@5', ':6.2f')
+
+    model.eval()
+    
+    with torch.no_grad():
+        for i, (img1, img2) in enumerate(test_data_loader):
+            img1, img2 = img1.cuda(non_blocking=True), img2.cuda(non_blocking=True)
+
+            output, target = model(im_q=img1, im_k=img2)
+            
+            acc1, acc5 = accuracy(output, target, topk=(1, 5))
+            top1.update(acc1[0])
+            top5.update(acc5[0])
+            
+            if i % args.print_freq == 0:
+                writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
+                            top1.get_avg(),
+                            epoch * len(test_data_loader) + i)
+                writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
+                            top5.get_avg(),
+                            epoch * len(test_data_loader) + i)
+                print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), top1.get_avg(), top5.get_avg()))
+    
+    # statistics to be written at the end of every epoch
+    writer.add_scalar('Training Accuracy/epoch top1 accuracy',
+                top1.get_avg(),
+                epoch)    
+    writer.add_scalar('Training Accuracy/epoch top5 accuracy',
+                top5.get_avg(),
+                epoch)
+    print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), top1.get_avg(), top5.get_avg()))
+    return top1.get_avg(), top5.get_avg()
+
+
 # test using a knn monitor
-def test(model, memory_data_loader, test_data_loader, epoch, writer, args):
+def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
     model.eval()
     classes = len(memory_data_loader.dataset.classes) #get number of classes
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
@@ -333,12 +386,13 @@ def test(model, memory_data_loader, test_data_loader, epoch, writer, args):
                             total_top1 / total_num * 100,
                             epoch * len(test_data_loader) + i)
                 print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
-    print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
+    print('KNN Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
     # statistics to be written at the end of every epoch
     writer.add_scalar('Training Accuracy/epoch top1 accuracy',
                 total_top1 / total_num * 100,
                 epoch)     
     return total_top1 / total_num * 100
+
 
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR
