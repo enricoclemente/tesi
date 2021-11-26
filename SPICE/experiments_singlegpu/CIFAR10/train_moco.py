@@ -12,6 +12,7 @@ import torch
 import torchvision
 import torch.nn as nn
 import torch.nn.parallel
+import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
@@ -23,6 +24,7 @@ from spice.model.feature_modules.resnet_cifar import resnet18_cifar
 import moco.loader
 import moco.builder
 from torchvision.datasets import CIFAR10
+from .CIFAR10_custom import CIFAR10Pair
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -107,7 +109,6 @@ def main_worker(args):
     torch.cuda.set_device(torch.cuda.current_device())
     model = model.cuda()
     
-
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
@@ -135,11 +136,11 @@ def main_worker(args):
     cudnn.benchmark = True  # A bool that, if True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest.
 
     # Data loading code
-    CIFAR10_normalize_values = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+    CIFAR10_normalization = transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
     
     # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
     # https://github.com/sthalles/SimCLR/blob/1848fc934ad844ae630e6c452300433fe99acfd9/data_aug/contrastive_learning_dataset.py#L8
-    augmentation = [
+    mocov2_augmentation = [
         transforms.RandomResizedCrop(32),
         transforms.RandomApply([
             transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)  # not strengthened
@@ -148,44 +149,48 @@ def main_worker(args):
         transforms.RandomApply([moco.loader.GaussianBlur([.1, 2.])], p=0.5),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        CIFAR10_normalize_values
+        CIFAR10_normalization
     ]
     
-    # creating CIFAR10 train dataset
-    train_dataset = CIFAR10(root=args.dataset_folder, train=True, 
-        transform=moco.loader.TwoCropsTransform(transforms.Compose(augmentation)), 
+    # creating CIFAR10 train dataset from custom CIFAR10 class
+    train_dataset = CIFAR10Pair(root=args.dataset_folder, train=True, 
+        transform=transforms.Compose(mocov2_augmentation), 
         download=True)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True, drop_last=True)
 
-    # check training dataset 
-    dataiter = iter(train_loader)
-    images, labels = dataiter.next()
-
-    # show images
-    print("showing some training images")
-    imshow(torchvision.utils.make_grid(images[0]))
-    imshow(torchvision.utils.make_grid(images[1]))
-
     # creating CIFAR10 test dataset, here we need only to apply simple normalization
     test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
         transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalize_values]), 
+                                    CIFAR10_normalization]), 
         download=True)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
-        pin_memory=True, drop_last=False)
+        pin_memory=True)
+
+    memory_data = CIFAR10(root='data', train=True, 
+        transform=transforms.Compose([transforms.ToTensor(),
+                                    CIFAR10_normalization]),  
+        download=True)
+    memory_loader = torch.utils.data.DataLoader(
+        memory_data, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+        pin_memory=True)
+
 
     # tensorboard plotter
-    writer = SummaryWriter(args.logs_folder + "/" + args.run_id)
+    train_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/train")
+    eval_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/eval")
 
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, epoch, args)
         
         # train for one epoch
-        metrics = train(train_loader, model, criterion, optimizer, epoch, writer, args)
+        metrics = train(train_loader, model, criterion, optimizer, epoch, train_writer, args)
 
+        test_acc_1 = test(model.encoder_q, memory_loader, test_loader, epoch, eval_writer, args)
+
+        metrics['eval_acc@1'] = test_acc_1
 
         if (epoch+1) % args.save_freq == 0:
             save_checkpoint({
@@ -230,22 +235,21 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
     model.train()
 
     end = time.time()
-    for i, (images, _) in enumerate(train_loader):
+    for i, (img1, img2) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
-
-        if epoch == 1:
-            # just want to display a pair of images in order to track training samples
-            img1 = images[0][0] / 2 + 0.5     # unnormalize
-            img2 = images[1][0] / 2 + 0.5     # unnormalize
-            writer.add_image("Training examples/epoch 1 image1",img1)  
-            writer.add_image("Training examples/epoch 1 image12",img2)  
         
-        images[0] = images[0].cuda(non_blocking=True)
-        images[1] = images[1].cuda(non_blocking=True)
+        if epoch == 1:
+            # first check
+            print("batches dimensions")
+            print(img1.size())
+            print(img2.size())
+
+        img1= img1.cuda(non_blocking=True)
+        img2 = img2.cuda(non_blocking=True)
 
         # compute output
-        output, target = model(im_q=images[0], im_k=images[1])
+        output, target = model(im_q=img1, im_k=img2)
         loss = criterion(output, target)
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
@@ -266,7 +270,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
 
         if i % args.print_freq == 0:
             progress.display(i)
-            print("writing minibatch on tensorboard")
+            # print("writing minibatch on tensorboard")
             writer.add_scalar('Training Loss/minibatches loss',
                         losses.get_avg(),
                         epoch * len(train_loader) + i)
@@ -276,9 +280,10 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
             writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
                         top5.get_avg(),
                         epoch * len(train_loader) + i)
-
+                        
+    progress.display(i)
     # statistics to be written at the end of every epoch
-    print("writing epoch metrics on tensorboard")
+    # print("writing epoch metrics on tensorboard")
     writer.add_scalar('Training Loss/epoch loss',
                 losses.get_avg(),
                 epoch)
@@ -292,12 +297,69 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
                 batch_time.get_sum(),
                 epoch)        
     metrics = {
-            "loss" : losses.get_avg(),
-            "top1": top1.get_avg(),
-            "top5": top5.get_avg()
+            "training_loss" : losses.get_avg(),
+            "training_acc@1": top1.get_avg(),
+            "training_acc@5": top5.get_avg()
         }
     return metrics
 
+# test using a knn monitor
+def test(model, memory_data_loader, test_data_loader, epoch, writer, args):
+    model.eval()
+    classes = len(memory_data_loader.dataset.classes) #get number of classes
+    total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
+    with torch.no_grad():
+        # generate feature bank
+        for data, target in memory_data_loader:
+            feature = model(data.cuda(non_blocking=True)) # for every sample in the batch let predict features
+            feature = F.normalize(feature, dim=1)
+            feature_bank.append(feature)    # create list of features
+        # [D, N] D=dim of features N=batch size
+        feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()
+        # [N]
+        feature_labels = torch.tensor(memory_data_loader.dataset.targets, device=feature_bank.device)
+        # loop test data to predict the label by weighted knn search
+        for i, (data, target) in enumerate(test_data_loader):
+            data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
+            feature = model(data)
+            feature = F.normalize(feature, dim=1)
+            
+            pred_labels = knn_predict(feature, feature_bank, feature_labels, classes, args.knn_k, args.knn_t)
+
+            total_num += data.size(0)
+            total_top1 += (pred_labels[:, 0] == target).float().sum().item()
+            if i % args.print_freq == 0:
+                writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
+                            total_top1 / total_num * 100,
+                            epoch * len(test_data_loader) + i)
+                print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
+    print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
+    # statistics to be written at the end of every epoch
+    writer.add_scalar('Training Accuracy/epoch top1 accuracy',
+                total_top1 / total_num * 100,
+                epoch)     
+    return total_top1 / total_num * 100
+
+# knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
+# implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR
+def knn_predict(feature, feature_bank, feature_labels, classes, knn_k, knn_t):
+    # compute cos similarity between each feature vector and feature bank ---> [B, N]
+    sim_matrix = torch.mm(feature, feature_bank)
+    # [B, K]
+    sim_weight, sim_indices = sim_matrix.topk(k=knn_k, dim=-1)
+    # [B, K]
+    sim_labels = torch.gather(feature_labels.expand(feature.size(0), -1), dim=-1, index=sim_indices)
+    sim_weight = (sim_weight / knn_t).exp()
+
+    # counts for each class
+    one_hot_label = torch.zeros(feature.size(0) * knn_k, classes, device=sim_labels.device)
+    # [B*K, C]
+    one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1), value=1.0)
+    # weighted score ---> [B, C]
+    pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, classes) * sim_weight.unsqueeze(dim=-1), dim=1)
+
+    pred_labels = pred_scores.argsort(dim=-1, descending=True)
+    return pred_labels
 
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
@@ -381,12 +443,6 @@ def accuracy(output, target, topk=(1,)):
             correct_k = correct[:k].reshape(k*correct.shape[1]).float().sum(0, keepdim=True)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
-
-def imshow(img):
-    img = img / 2 + 0.5     # unnormalize
-    npimg = img.numpy()
-    plt.imshow(np.transpose(npimg, (1, 2, 0)))
-    plt.show()
 
 if __name__ == '__main__':
     main()
