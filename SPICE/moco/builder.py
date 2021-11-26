@@ -149,7 +149,7 @@ class MoCo(nn.Module):
         """
         return x[idx_unshuffle]
 
-    def forward(self, im_q, im_k):
+    def forward(self, im_q, im_k, eval=False):
         """
         Input:
             im_q: a batch of query images
@@ -157,38 +157,49 @@ class MoCo(nn.Module):
         Output:
             logits, targets
         """
-
-        # compute query features
-        q = self.encoder_q(im_q)  # queries: NxC
-        q = nn.functional.normalize(q, dim=1)
-
-
-        # compute key features
-        with torch.no_grad():  # no gradient to keys
-            self._momentum_update_key_encoder()  # update the key encoder
-            
-            if self.single_gpu:
-                # if using single-gpu shuffling and unshuffling related methods are called,
-                # implementation taken from 
-                # https://colab.research.google.com/github/facebookresearch/moco/blob/colab-notebook/colab/moco_cifar10_demo.ipynb#scrollTo=lzFyFnhbk8hj
-
-                # shuffle for making use of BN
-                im_k, idx_unshuffle = self._batch_shuffle_single_gpu(im_k)
-
-                k = self.encoder_k(im_k)  # keys: NxC
+        # added eval code
+        if eval:
+            self.encoder_k.eval()
+            self.encoder_q.eval()
+            with torch.no_grad():
+                q = self.encoder_q(im_q)
+                q = nn.functional.normalize(q, dim=1)
+                k = self.encoder_k(im_k)
                 k = nn.functional.normalize(k, dim=1)
+        else:
+            self.encoder_k.train()
+            self.encoder_q.train()
+            # compute query features
+            q = self.encoder_q(im_q)  # queries: NxC
+            q = nn.functional.normalize(q, dim=1)
 
-                # undo shuffle
-                k = self._batch_unshuffle_single_gpu(k, idx_unshuffle)
-            else:
-                # shuffle for making use of BN
-                im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)
 
-                k = self.encoder_k(im_k)  # keys: NxC
-                k = nn.functional.normalize(k, dim=1)
+            # compute key features
+            with torch.no_grad():  # no gradient to keys
+                self._momentum_update_key_encoder()  # update the key encoder
+                
+                if self.single_gpu:
+                    # if using single-gpu shuffling and unshuffling related methods are called,
+                    # implementation taken from 
+                    # https://colab.research.google.com/github/facebookresearch/moco/blob/colab-notebook/colab/moco_cifar10_demo.ipynb#scrollTo=lzFyFnhbk8hj
 
-                # undo shuffle
-                k = self._batch_unshuffle_ddp(k, idx_unshuffle)
+                    # shuffle for making use of BN
+                    im_k, idx_unshuffle = self._batch_shuffle_single_gpu(im_k)
+
+                    k = self.encoder_k(im_k)  # keys: NxC
+                    k = nn.functional.normalize(k, dim=1)
+
+                    # undo shuffle
+                    k = self._batch_unshuffle_single_gpu(k, idx_unshuffle)
+                else:
+                    # shuffle for making use of BN
+                    im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)
+
+                    k = self.encoder_k(im_k)  # keys: NxC
+                    k = nn.functional.normalize(k, dim=1)
+
+                    # undo shuffle
+                    k = self._batch_unshuffle_ddp(k, idx_unshuffle)
 
         # compute logits
         # Einstein sum is more intuitive
@@ -206,11 +217,12 @@ class MoCo(nn.Module):
         # labels: positive key indicators
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
-        # dequeue and enqueue
-        if self.single_gpu:
-            self._dequeue_and_enqueue_single_gpu(k)
-        else:
-            self._dequeue_and_enqueue(k)
+        if not eval:
+            # dequeue and enqueue
+            if self.single_gpu:
+                self._dequeue_and_enqueue_single_gpu(k)
+            else:
+                self._dequeue_and_enqueue(k)
 
         return logits, labels
 

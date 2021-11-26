@@ -385,12 +385,13 @@ def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
                 writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
                             total_top1 / total_num * 100,
                             epoch * len(test_data_loader) + i)
-                print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
-    print('KNN Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
+                print('KNN Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
+    
     # statistics to be written at the end of every epoch
     writer.add_scalar('Training Accuracy/epoch top1 accuracy',
                 total_top1 / total_num * 100,
                 epoch)     
+    print('KNN Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
     return total_top1 / total_num * 100
 
 
