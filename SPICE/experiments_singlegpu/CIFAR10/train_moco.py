@@ -490,6 +490,7 @@ def adjust_learning_rate(optimizer, epoch, args):
     else:  # stepwise lr schedule
         for milestone in args.schedule:
             lr *= 0.1 if epoch >= milestone else 1.
+    print("new learning rate: {}".format(lr))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
