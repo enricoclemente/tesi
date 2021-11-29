@@ -201,7 +201,7 @@ def main_worker(args):
         # train for one epoch
         metrics = train(train_loader, model, criterion, optimizer, epoch, train_writer, args)
 
-        test_acc1, test_acc5 = test(model, test_loader, epoch, test_writer, args)
+        test_acc1, test_acc5 = test(test_loader, model, criterion, epoch, test_writer, args)
         metrics['test_acc@1'] = test_acc1
         metrics['test_acc@5'] = test_acc5
 
@@ -320,7 +320,8 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
     return metrics
 
 
-def test(model, test_data_loader, epoch, writer, args):
+def test(test_data_loader, model, criterion, epoch, writer, args):
+    losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
     top5 = AverageMeter('Acc@5', ':6.2f')
 
@@ -330,22 +331,33 @@ def test(model, test_data_loader, epoch, writer, args):
         for i, (img1, img2) in enumerate(test_data_loader):
             img1, img2 = img1.cuda(non_blocking=True), img2.cuda(non_blocking=True)
 
-            output, target = model(im_q=img1, im_k=img2)
+            output, target = model(im_q=img1, im_k=img2, eval=True)
             
+            # calculate accuracy and loss
+            loss = criterion(output, target)
             acc1, acc5 = accuracy(output, target, topk=(1, 5))
+
+            # update meters
             top1.update(acc1[0])
             top5.update(acc5[0])
+            losses.update(loss)
             
             if i % args.print_freq == 0:
+                writer.add_scalar('Training Loss/minibatches loss',
+                        losses.get_avg(),
+                        epoch * len(test_data_loader) + i)
                 writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
                             top1.get_avg(),
                             epoch * len(test_data_loader) + i)
                 writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
                             top5.get_avg(),
                             epoch * len(test_data_loader) + i)
-                print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), top1.get_avg(), top5.get_avg()))
+                print('Test Epoch: [{}][{}/{}] Loss:{} Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), losses.get_avg(), top1.get_avg(), top5.get_avg()))
     
     # statistics to be written at the end of every epoch
+    writer.add_scalar('Training Loss/epoch loss',
+                losses.get_avg(),
+                epoch)
     writer.add_scalar('Training Accuracy/epoch top1 accuracy',
                 top1.get_avg(),
                 epoch)    
