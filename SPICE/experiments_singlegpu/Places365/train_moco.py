@@ -6,6 +6,8 @@ import os
 import shutil
 import time
 import sys
+
+from torchvision.datasets.places365 import Places365
 sys.path.insert(0, './')
 
 import torch
@@ -23,8 +25,8 @@ from spice.model.feature_modules.resnet_cifar import resnet18_cifar
 
 import moco.loader
 import moco.builder
-from torchvision.datasets import CIFAR10
-from CIFAR10_custom import CIFAR10Pair
+from torchvision.models import resnet18
+from Places_custom import Places365Pair
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -107,8 +109,8 @@ def main():
 def main_worker(args):
     # creating model MoCo using resnet18_cifar which is an implementation adapted for CIFAR10
     model = moco.builder.MoCo(
-        base_encoder=resnet18_cifar,
-        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
+        base_encoder=resnet18,
+        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=256, single_gpu=True)
     print(model)
 
     torch.cuda.set_device(torch.cuda.current_device())
@@ -141,12 +143,12 @@ def main_worker(args):
     cudnn.benchmark = True  # A bool that, if True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest.
 
     # Data loading code
-    CIFAR10_normalization = transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
+    ImageNet_normalization = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     
     # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
     # https://github.com/sthalles/SimCLR/blob/1848fc934ad844ae630e6c452300433fe99acfd9/data_aug/contrastive_learning_dataset.py#L8
     mocov2_augmentation = [
-        transforms.RandomResizedCrop(32),
+        transforms.RandomResizedCrop(256),  
         transforms.RandomApply([
             transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)  # not strengthened
         ], p=0.8),
@@ -154,17 +156,17 @@ def main_worker(args):
         transforms.RandomApply([moco.loader.GaussianBlur([.1, 2.])], p=0.5),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
-        CIFAR10_normalization
+        ImageNet_normalization
     ]
     
     # creating CIFAR10 train and test dataset from custom CIFAR10 class
-    train_dataset = CIFAR10Pair(root=args.dataset_folder, train=True, 
+    train_dataset = Places365Pair(root=args.dataset_folder, train=True, 
         transform=transforms.Compose(mocov2_augmentation), 
         download=True)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True, drop_last=True)
-    test_dataset = CIFAR10Pair(root=args.dataset_folder, train=False, 
+    test_dataset = Places365Pair(root=args.dataset_folder, train=False, 
         transform=transforms.Compose(mocov2_augmentation), 
         download=True)
     test_loader = torch.utils.data.DataLoader(
@@ -173,17 +175,17 @@ def main_worker(args):
 
 
     # creating CIFAR10 datasets for knn test, here we need only to apply simple normalization
-    knn_test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
+    knn_test_dataset = Places365(root=args.dataset_folder, train=False, 
         transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalization]), 
+                                    ImageNet_normalization]), 
         download=True)
     knn_test_loader = torch.utils.data.DataLoader(
         knn_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
         pin_memory=True)
 
-    memory_data = CIFAR10(root='data', train=True, 
+    memory_data = Places365(root='data', train=True, 
         transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalization]),  
+                                    ImageNet_normalization]),  
         download=True)
     memory_loader = torch.utils.data.DataLoader(
         memory_data, batch_size=args.batch_size, shuffle=False, num_workers=1, 
