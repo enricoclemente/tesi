@@ -7,7 +7,7 @@ import shutil
 import time
 import sys
 
-from torchvision.datasets.places365 import Places365
+
 sys.path.insert(0, './')
 
 import torch
@@ -27,6 +27,7 @@ import moco.loader
 import moco.builder
 from torchvision.models import resnet18
 from Places_custom import Places365Pair
+from torchvision.datasets import Places365
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -159,37 +160,38 @@ def main_worker(args):
         ImageNet_normalization
     ]
     
-    # creating CIFAR10 train and test dataset from custom CIFAR10 class
-    train_dataset = Places365Pair(root=args.dataset_folder, train=True, 
+    # creating CIFAR10 train and test dataset from custom Places365 class
+    # https://pytorch.org/vision/stable/datasets.html#places365
+    train_dataset = Places365Pair(root=args.dataset_folder, split="train-standard", small=True,
         transform=transforms.Compose(mocov2_augmentation), 
         download=True)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True, drop_last=True)
-    test_dataset = Places365Pair(root=args.dataset_folder, train=False, 
-        transform=transforms.Compose(mocov2_augmentation), 
-        download=True)
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
-        pin_memory=True)
+    # test_dataset = Places365Pair(root=args.dataset_folder, split="train-challenge", small=True, 
+    #     transform=transforms.Compose(mocov2_augmentation), 
+    #     download=True)
+    # test_loader = torch.utils.data.DataLoader(
+    #     test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+    #     pin_memory=True)
 
 
-    # creating CIFAR10 datasets for knn test, here we need only to apply simple normalization
-    knn_test_dataset = Places365(root=args.dataset_folder, train=False, 
-        transform=transforms.Compose([transforms.ToTensor(),
-                                    ImageNet_normalization]), 
-        download=True)
-    knn_test_loader = torch.utils.data.DataLoader(
-        knn_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
-        pin_memory=True)
+    # # creating CIFAR10 datasets for knn test, here we need only to apply simple normalization
+    # knn_test_dataset = Places365(root=args.dataset_folder, split="train-challenge", small=True, 
+    #     transform=transforms.Compose([transforms.ToTensor(),
+    #                                 ImageNet_normalization]), 
+    #     download=True)
+    # knn_test_loader = torch.utils.data.DataLoader(
+    #     knn_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+    #     pin_memory=True)
 
-    memory_data = Places365(root='data', train=True, 
-        transform=transforms.Compose([transforms.ToTensor(),
-                                    ImageNet_normalization]),  
-        download=True)
-    memory_loader = torch.utils.data.DataLoader(
-        memory_data, batch_size=args.batch_size, shuffle=False, num_workers=1, 
-        pin_memory=True)
+    # memory_data = Places365(root='data', split="train-standard", small=True,
+    #     transform=transforms.Compose([transforms.ToTensor(),
+    #                                 ImageNet_normalization]),  
+    #     download=True)
+    # memory_loader = torch.utils.data.DataLoader(
+    #     memory_data, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+    #     pin_memory=True)
 
 
     # tensorboard plotter
@@ -203,12 +205,12 @@ def main_worker(args):
         # train for one epoch
         metrics = train(train_loader, model, criterion, optimizer, epoch, train_writer, args)
 
-        test_acc1, test_acc5 = test(test_loader, model, criterion, epoch, test_writer, args)
-        metrics['test_acc@1'] = test_acc1
-        metrics['test_acc@5'] = test_acc5
+        # test_acc1, test_acc5 = test(test_loader, model, criterion, epoch, test_writer, args)
+        # metrics['test_acc@1'] = test_acc1
+        # metrics['test_acc@5'] = test_acc5
 
-        knn_test_acc1 = knn_test(model.encoder_q, memory_loader, knn_test_loader, epoch, knn_test_writer, args)
-        metrics['knn_test_acc@1'] = knn_test_acc1
+        # knn_test_acc1 = knn_test(model.encoder_q, memory_loader, knn_test_loader, epoch, knn_test_writer, args)
+        # metrics['knn_test_acc@1'] = knn_test_acc1
 
         if (epoch+1) % args.save_freq == 0:
             # save_checkpoint({

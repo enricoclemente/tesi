@@ -25,8 +25,8 @@ class MoCo(nn.Module):
         self.single_gpu = single_gpu
         # create the encoders
         # num_classes is the output fc dimension
-        self.encoder_q = base_encoder(num_classes=dim, in_size=input_size)
-        self.encoder_k = base_encoder(num_classes=dim, in_size=input_size)
+        self.encoder_q = base_encoder(num_classes=dim)
+        self.encoder_k = base_encoder(num_classes=dim)
 
         if mlp:  # hack: brute-force replacement
             dim_mlp = self.encoder_q.fc.in_features
@@ -170,8 +170,8 @@ class MoCo(nn.Module):
             self.encoder_k.train()
             self.encoder_q.train()
             # compute query features
-            q = self.encoder_q(im_q)  # queries: NxC
-            q = nn.functional.normalize(q, dim=1)
+            q = self.encoder_q(im_q)  # queries: NxC where C is features_dimension
+            q = nn.functional.normalize(q, dim=1)   # normalizing every q feature vector in the batch
 
 
             # compute key features
@@ -186,7 +186,8 @@ class MoCo(nn.Module):
                     # shuffle for making use of BN
                     im_k, idx_unshuffle = self._batch_shuffle_single_gpu(im_k)
 
-                    k = self.encoder_k(im_k)  # keys: NxC
+                    # get keys features but without updating the encoder since it is updated with momentum
+                    k = self.encoder_k(im_k)  # keys: Nxfeatures_dimension
                     k = nn.functional.normalize(k, dim=1)
 
                     # undo shuffle
