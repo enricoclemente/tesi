@@ -24,7 +24,7 @@ from spice.model.feature_modules.resnet_cifar import resnet18_cifar
 import moco.loader
 import moco.builder
 from torchvision.datasets import CIFAR10
-from CIFAR10_custom import CIFAR10Pair
+from CIFAR10.CIFAR10_custom import CIFAR10Pair
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -146,7 +146,7 @@ def main_worker(args):
     # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
     # https://github.com/sthalles/SimCLR/blob/1848fc934ad844ae630e6c452300433fe99acfd9/data_aug/contrastive_learning_dataset.py#L8
     mocov2_augmentation = [
-        transforms.RandomResizedCrop(32),
+        transforms.RandomResizedCrop(32, scale=(0.2, 1.)),
         transforms.RandomApply([
             transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)  # not strengthened
         ], p=0.8),
@@ -269,7 +269,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         img2 = img2.cuda(non_blocking=True)
 
         # compute output
-        output, target = model(im_q=img1, im_k=img2)
+        output, target = model.forward_singlegpu(im_q=img1, im_k=img2)
         loss = criterion(output, target)
 
         # acc1/acc5 are (K+1)-way contrast classifier accuracy
@@ -335,7 +335,7 @@ def test(test_data_loader, model, criterion, epoch, writer, args):
         for i, (img1, img2) in enumerate(test_data_loader):
             img1, img2 = img1.cuda(non_blocking=True), img2.cuda(non_blocking=True)
 
-            output, target = model(im_q=img1, im_k=img2, eval=True)
+            output, target = model.forward_singlegpu_eval(im_q=img1, im_k=img2, eval=True)
             
             # calculate accuracy and loss
             loss = criterion(output, target)
@@ -346,17 +346,17 @@ def test(test_data_loader, model, criterion, epoch, writer, args):
             top5.update(acc5[0])
             losses.update(loss)
             
-            if i % args.print_freq == 0:
-                writer.add_scalar('Training Loss/minibatches loss',
-                        losses.get_avg(),
-                        epoch * len(test_data_loader) + i)
-                writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
-                            top1.get_avg(),
-                            epoch * len(test_data_loader) + i)
-                writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
-                            top5.get_avg(),
-                            epoch * len(test_data_loader) + i)
-                print('Test Epoch: [{}][{}/{}] Loss:{} Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), losses.get_avg(), top1.get_avg(), top5.get_avg()))
+            # if i % args.print_freq == 0:
+            #     writer.add_scalar('Training Loss/minibatches loss',
+            #             losses.get_avg(),
+            #             epoch * len(test_data_loader) + i)
+            #     writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
+            #                 top1.get_avg(),
+            #                 epoch * len(test_data_loader) + i)
+            #     writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
+            #                 top5.get_avg(),
+            #                 epoch * len(test_data_loader) + i)
+            #     print('Test Epoch: [{}][{}/{}] Loss:{} Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), losses.get_avg(), top1.get_avg(), top5.get_avg()))
     
     # statistics to be written at the end of every epoch
     writer.add_scalar('Training Loss/epoch loss',
@@ -505,6 +505,9 @@ def accuracy(output, target, topk=(1,)):
         maxk = max(topk)
         batch_size = target.size(0)
 
+        # torch.topk(input, k, dim=None, largest=True, sorted=True, *, out=None)
+        # Returns the k largest elements of the given input tensor along a given dimension.
+        # in this case output is Nx(1+K) and topk return a tensor long 1+K
         _, pred = output.topk(maxk, 1, True, True)
         pred = pred.t()
         correct = pred.eq(target.view(1, -1).expand_as(pred))

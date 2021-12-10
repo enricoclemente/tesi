@@ -149,7 +149,9 @@ class MoCo(nn.Module):
         """
         return x[idx_unshuffle]
 
-    def forward(self, im_q, im_k, eval=False):
+
+    @torch.no_grad()
+    def forward_singlegpu_eval(self, im_q, im_k):
         """
         Input:
             im_q: a batch of query images
@@ -157,57 +159,20 @@ class MoCo(nn.Module):
         Output:
             logits, targets
         """
-        # added eval code
-        if eval:
-            self.encoder_k.eval()
-            self.encoder_q.eval()
-            with torch.no_grad():
-                q = self.encoder_q(im_q)
-                q = nn.functional.normalize(q, dim=1)
-                k = self.encoder_k(im_k)
-                k = nn.functional.normalize(k, dim=1)
-        else:
-            self.encoder_k.train()
-            self.encoder_q.train()
-            # compute query features
-            q = self.encoder_q(im_q)  # queries: NxC where C is features_dimension
-            q = nn.functional.normalize(q, dim=1)   # normalizing every q feature vector in the batch
-
-
-            # compute key features
-            with torch.no_grad():  # no gradient to keys
-                self._momentum_update_key_encoder()  # update the key encoder
-                
-                if self.single_gpu:
-                    # if using single-gpu shuffling and unshuffling related methods are called,
-                    # implementation taken from 
-                    # https://colab.research.google.com/github/facebookresearch/moco/blob/colab-notebook/colab/moco_cifar10_demo.ipynb#scrollTo=lzFyFnhbk8hj
-
-                    # shuffle for making use of BN
-                    im_k, idx_unshuffle = self._batch_shuffle_single_gpu(im_k)
-
-                    # get keys features but without updating the encoder since it is updated with momentum
-                    k = self.encoder_k(im_k)  # keys: Nxfeatures_dimension
-                    k = nn.functional.normalize(k, dim=1)
-
-                    # undo shuffle
-                    k = self._batch_unshuffle_single_gpu(k, idx_unshuffle)
-                else:
-                    # shuffle for making use of BN
-                    im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)
-
-                    k = self.encoder_k(im_k)  # keys: NxC
-                    k = nn.functional.normalize(k, dim=1)
-
-                    # undo shuffle
-                    k = self._batch_unshuffle_ddp(k, idx_unshuffle)
-
+        self.encoder_k.eval()
+        self.encoder_q.eval()
+        with torch.no_grad():
+            q = self.encoder_q(im_q)
+            q = nn.functional.normalize(q, dim=1)
+            k = self.encoder_k(im_k)
+            k = nn.functional.normalize(k, dim=1)
+        
         # compute logits
         # Einstein sum is more intuitive
         # positive logits: Nx1
-        l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)
+        l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)  # element-wise product and sum over columns
         # negative logits: NxK
-        l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()])
+        l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()]) # matrix product
 
         # logits: Nx(1+K)
         logits = torch.cat([l_pos, l_neg], dim=1)
@@ -215,15 +180,113 @@ class MoCo(nn.Module):
         # apply temperature
         logits /= self.T
 
-        # labels: positive key indicators
+        # labels: N positive key indicators 
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
 
-        if not eval:
-            # dequeue and enqueue
-            if self.single_gpu:
-                self._dequeue_and_enqueue_single_gpu(k)
-            else:
-                self._dequeue_and_enqueue(k)
+        return logits, labels
+
+
+    def forward_singlegpu(self, im_q, im_k, eval=False):
+        """
+        Input:
+            im_q: a batch of query images
+            im_k: a batch of key images
+        Output:
+            logits, targets
+        """
+        self.encoder_k.train()
+        self.encoder_q.train()
+        # compute query features
+        q = self.encoder_q(im_q)  # queries: NxC where C is features_dimension
+        q = nn.functional.normalize(q, dim=1)   # normalizing every q feature vector in the batch
+
+
+        # compute key features
+        with torch.no_grad():  # no gradient to keys
+            self._momentum_update_key_encoder()  # update the key encoder
+            
+            # if using single-gpu shuffling and unshuffling related methods are called,
+            # implementation taken from 
+            # https://colab.research.google.com/github/facebookresearch/moco/blob/colab-notebook/colab/moco_cifar10_demo.ipynb#scrollTo=lzFyFnhbk8hj
+
+            # shuffle for making use of BN
+            im_k, idx_unshuffle = self._batch_shuffle_single_gpu(im_k)
+
+            # get keys features but without updating the encoder since it is updated with momentum
+            k = self.encoder_k(im_k)  # keys: NxC features_dimension
+            k = nn.functional.normalize(k, dim=1)
+
+            # undo shuffle
+            k = self._batch_unshuffle_single_gpu(k, idx_unshuffle)
+        
+
+        # compute logits
+        # Einstein sum is more intuitive
+        # positive logits: Nx1
+        l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)  # element-wise product and sum over columns
+        # negative logits: NxK
+        l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()]) # matrix product
+
+        # logits: Nx(1+K)
+        logits = torch.cat([l_pos, l_neg], dim=1)
+
+        # apply temperature
+        logits /= self.T
+
+        # labels: N positive key indicators 
+        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
+
+        if self.single_gpu:
+            self._dequeue_and_enqueue_single_gpu(k)
+
+        return logits, labels
+
+
+    def forward(self, im_q, im_k):
+        """
+        Input:
+            im_q: a batch of query images
+            im_k: a batch of key images
+        Output:
+            logits, targets
+        """
+        
+        self.encoder_k.train()
+        self.encoder_q.train()
+        # compute query features
+        q = self.encoder_q(im_q)  # queries: NxC where C is features_dimension
+        q = nn.functional.normalize(q, dim=1)   # normalizing every q feature vector in the batch
+
+        # compute key features
+        with torch.no_grad():  # no gradient to keys
+            self._momentum_update_key_encoder()  # update the key encoder
+
+            # shuffle for making use of BN
+            im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)
+
+            k = self.encoder_k(im_k)  # keys: NxC
+            k = nn.functional.normalize(k, dim=1)
+
+            # undo shuffle
+            k = self._batch_unshuffle_ddp(k, idx_unshuffle)
+
+        # compute logits
+        # Einstein sum is more intuitive
+        # positive logits: Nx1
+        l_pos = torch.einsum('nc,nc->n', [q, k]).unsqueeze(-1)  # element-wise product and sum over columns
+        # negative logits: NxK
+        l_neg = torch.einsum('nc,ck->nk', [q, self.queue.clone().detach()]) # matrix product
+
+        # logits: Nx(1+K)
+        logits = torch.cat([l_pos, l_neg], dim=1)
+
+        # apply temperature
+        logits /= self.T
+
+        # labels: N positive key indicators 
+        labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
+
+        self._dequeue_and_enqueue(k)
 
         return logits, labels
 
