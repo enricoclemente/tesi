@@ -24,7 +24,7 @@ from spice.model.feature_modules.resnet_cifar import resnet18_cifar
 import moco.loader
 import moco.builder
 from torchvision.datasets import CIFAR10
-from CIFAR10.CIFAR10_custom import CIFAR10Pair
+from experiments_singlegpu.CIFAR10.CIFAR10_custom import CIFAR10Pair
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -181,7 +181,7 @@ def main_worker(args):
         knn_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
         pin_memory=True)
 
-    memory_data = CIFAR10(root='data', train=True, 
+    memory_data = CIFAR10(root=args.dataset_folder, train=True, 
         transform=transforms.Compose([transforms.ToTensor(),
                                     CIFAR10_normalization]),  
         download=True)
@@ -191,9 +191,9 @@ def main_worker(args):
 
 
     # tensorboard plotter
-    train_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/train")
-    test_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/test")
-    knn_test_writer = SummaryWriter(args.logs_folder + "/" + args.run_id + "/knn_test")
+    train_writer = SummaryWriter(args.logs_folder + "/train")
+    test_writer = SummaryWriter(args.logs_folder + "/test")
+    knn_test_writer = SummaryWriter(args.logs_folder + "/knn_test")
 
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, epoch, args)
@@ -219,7 +219,8 @@ def main_worker(args):
 
             # remove old checkpoint. I not overwrite because if something goes wrong the one before
             # will be in the bin and could be restored
-            os.remove('{}/checkpoint_last.pth.tar'.format(args.save_folder))
+            if os.path.exists('{}/checkpoint_last.pth.tar'.format(args.save_folder)):
+                os.rename('{}/checkpoint_last.pth.tar'.format(args.save_folder), '{}/checkpoint_last-1.pth.tar'.format(args.save_folder))
 
             save_checkpoint({
                 'epoch': epoch + 1,
@@ -335,7 +336,7 @@ def test(test_data_loader, model, criterion, epoch, writer, args):
         for i, (img1, img2) in enumerate(test_data_loader):
             img1, img2 = img1.cuda(non_blocking=True), img2.cuda(non_blocking=True)
 
-            output, target = model.forward_singlegpu_eval(im_q=img1, im_k=img2, eval=True)
+            output, target = model.forward_singlegpu_eval(im_q=img1, im_k=img2)
             
             # calculate accuracy and loss
             loss = criterion(output, target)
@@ -346,7 +347,7 @@ def test(test_data_loader, model, criterion, epoch, writer, args):
             top5.update(acc5[0])
             losses.update(loss)
             
-            # if i % args.print_freq == 0:
+            if i % args.print_freq == 0:
             #     writer.add_scalar('Training Loss/minibatches loss',
             #             losses.get_avg(),
             #             epoch * len(test_data_loader) + i)
@@ -356,7 +357,7 @@ def test(test_data_loader, model, criterion, epoch, writer, args):
             #     writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
             #                 top5.get_avg(),
             #                 epoch * len(test_data_loader) + i)
-            #     print('Test Epoch: [{}][{}/{}] Loss:{} Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), losses.get_avg(), top1.get_avg(), top5.get_avg()))
+                print('Test Epoch: [{}][{}/{}] Loss:{} Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), losses.get_avg(), top1.get_avg(), top5.get_avg()))
     
     # statistics to be written at the end of every epoch
     writer.add_scalar('Training Loss/epoch loss',
@@ -398,9 +399,6 @@ def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
             total_num += data.size(0)
             total_top1 += (pred_labels[:, 0] == target).float().sum().item()
             if i % args.print_freq == 0:
-                writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
-                            total_top1 / total_num * 100,
-                            epoch * len(test_data_loader) + i)
                 print('KNN Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
     
     # statistics to be written at the end of every epoch
