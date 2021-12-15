@@ -42,10 +42,13 @@ parser.add_argument('--batch-size', default=128, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.015, type=float,
-                    metavar='LR', help='initial learning rate', dest='lr')
-parser.add_argument('--schedule', default=[120, 160], nargs='*', type=int,
-                    help='learning rate schedule (when to drop lr by 10x)')
+parser.add_argument('--start_lr', '--starting-learning-rate', default=1e-7, type=float,
+                    help='starting learning rate')
+parser.add_argument('--end_lr', '--ending-learning-rate', default=0.1, type=float,
+                    help='ending learning rate')
+parser.add_argument('--num_iter', '--number-iterations', default=100, type=int,
+                    help='number of steps between start_lr and end_lr')
+
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum of SGD solver')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
@@ -110,7 +113,7 @@ def main():
     model = moco.builder.MoCo(
         base_encoder=resnet18_cifar,
         dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
-    print(model)
+    # print(model)
 
     torch.cuda.set_device(torch.cuda.current_device())
     model = model.cuda()
@@ -118,33 +121,23 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    optimizer = torch.optim.SGD(model.parameters(),     
-                                args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay)
-    losses_writer = SummaryWriter(args.logs_folder + "/lr_finder")
+    # optimizer = torch.optim.SGD(model.parameters(),     
+    #                             args.start_lr,
+    #                             momentum=args.momentum,
+    #                             weight_decay=args.weight_decay)
+    optimizer = torch.optim.Adam(model.parameters(), args.start_lr, weight_decay=args.weight_decay)
 
-    lr_finder = LRFinder(model, optimizer, criterion, device="cuda")
-    lr_finder.range_test(train_loader, end_lr=10, num_iter=100, step_mode="exp")
+    lr_finder = LRFinder(model, optimizer, criterion)
+    lr_finder.range_test(train_loader, end_lr=args.end_lr, num_iter=args.num_iter, step_mode="exp", accumulation_steps=1)
     losses = lr_finder.history
     print(losses)
-    lr_finder.save_plot(save_name="./results/step_mode_exp.png")
-    
-    for i in range(len(losses['lr'])):
-        losses_writer.add_scalar('Losses/step_mode_exp',
-                            losses['loss'][i],
-                            losses['lr'][i])
+    lr_finder.save_plot(save_name="step_mode_exp__start_lr_" + str(args.start_lr) + "__end_lr_" + str(args.end_lr) + "__number_of_iterations_" + str(args.num_iter))
     lr_finder.reset()
 
-    lr_finder.range_test(train_loader, end_lr=10, num_iter=100, step_mode="linear")
+    lr_finder.range_test(train_loader, end_lr=args.end_lr, num_iter=args.num_iter, step_mode="linear", accumulation_steps=1)
     losses = lr_finder.history
     print(losses)
-    lr_finder.save_plot(save_name="./results/linear_mode_exp.png")
-
-    for i in range(len(losses['lr'])):
-        losses_writer.add_scalar('Losses/step_mode_linear',
-                            losses['loss'][i],
-                            losses['lr'][i])
+    lr_finder.save_plot(save_name="step_mode_linear__start_lr_" + str(args.start_lr) + "__end_lr_" + str(args.end_lr) + "__number_of_iterations_" + str(args.num_iter))
     lr_finder.reset()
     
 

@@ -162,6 +162,7 @@ class LRFinder(object):
         # Save the original state of the model and optimizer so they can be restored if
         # needed
         self.model_device = next(self.model.parameters()).device
+        print("model_device: {}".format(self.model_device))
         self.state_cacher = StateCacher(memory_cache, cache_dir=cache_dir)
         self.state_cacher.store("model", self.model.state_dict())
         self.state_cacher.store("optimizer", self.optimizer.state_dict())
@@ -370,7 +371,10 @@ class LRFinder(object):
         for i in range(accumulation_steps):
             (img1, img2) = next(train_iter)
             
-            img1= img1.cuda(non_blocking=True)
+            # print(img1.size())
+            # print(img2.size())
+
+            img1 = img1.cuda(non_blocking=True)
             img2 = img2.cuda(non_blocking=True)
             
             # Forward pass
@@ -398,6 +402,7 @@ class LRFinder(object):
             else:
                 total_loss += loss
 
+        # self.optimizer.zero_grad()
         self.optimizer.step()
 
         return total_loss.item()
@@ -632,7 +637,8 @@ class LRFinder(object):
 
         # Show only if the figure was created internally
         if fig is not None:
-            plt.savefig(save_name)
+            best_lr = "__suggested_lr_{:.2E}".format(lrs[min_grad_idx])
+            plt.savefig(save_name + best_lr + ".png")
 
         if suggest_lr and min_grad_idx is not None:
             return ax, lrs[min_grad_idx]
