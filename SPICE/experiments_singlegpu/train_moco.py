@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+parser = argparse.ArgumentParser(description='PyTorch MoCo Training')
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
 parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
@@ -348,15 +348,6 @@ def test(test_data_loader, model, criterion, epoch, writer, args):
             losses.update(loss)
             
             if i % args.print_freq == 0:
-            #     writer.add_scalar('Training Loss/minibatches loss',
-            #             losses.get_avg(),
-            #             epoch * len(test_data_loader) + i)
-            #     writer.add_scalar('Training Accuracy/minibatches top1 accuracy',
-            #                 top1.get_avg(),
-            #                 epoch * len(test_data_loader) + i)
-            #     writer.add_scalar('Training Accuracy/minibatches top5 accuracy',
-            #                 top5.get_avg(),
-            #                 epoch * len(test_data_loader) + i)
                 print('Test Epoch: [{}][{}/{}] Loss:{} Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), losses.get_avg(), top1.get_avg(), top5.get_avg()))
     
     # statistics to be written at the end of every epoch
@@ -379,19 +370,21 @@ def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
     classes = len(memory_data_loader.dataset.classes) #get number of classes
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
     with torch.no_grad():
-        # generate feature bank
+        # generate feature bank from train dataset
         for data, target in memory_data_loader:
-            feature = model(data.cuda(non_blocking=True)) # for every sample in the batch let predict features
+            feature = model(data.cuda(non_blocking=True)) # for every sample in the batch let predict features NxC tensor
             feature = F.normalize(feature, dim=1)
-            feature_bank.append(feature)    # create list of features
-        # [D, N] D=dim of features N=batch size
-        feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()
-        # [N]
-        feature_labels = torch.tensor(memory_data_loader.dataset.targets, device=feature_bank.device)
-        # loop test data to predict the label by weighted knn search
-        for i, (data, target) in enumerate(test_data_loader):
+            feature_bank.append(feature)    # create list of features [tensor1 (NxC), tensor2 (NxC), tensorM (NxC)] where M is the number of minibatches
+
+        feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()  # first concatenates all features tensors [NxC],[NxC],... 
+                                                                        # then transpose --> [CxN],[CxN], ... --> Cx(N*number of minibatches) contiguous is for the memory format
+        
+        feature_labels = torch.tensor(memory_data_loader.dataset.targets, device=feature_bank.device)   # tensor of labels (N*number of minibatches)
+
+        # loop test data to predict the label by weighted knn search 
+        for i, (data, target) in enumerate(test_data_loader):   # iterate on test dataset
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
-            feature = model(data)
+            feature = model(data)   # NxC
             feature = F.normalize(feature, dim=1)
             
             pred_labels = knn_predict(feature, feature_bank, feature_labels, classes, args.knn_k, args.knn_t)
@@ -412,16 +405,19 @@ def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR
 def knn_predict(feature, feature_bank, feature_labels, classes, knn_k, knn_t):
-    # compute cos similarity between each feature vector and feature bank ---> [B, N]
+    # compute cos similarity between each feature vector and feature bank ---> Nx(dim of train dataset)
     sim_matrix = torch.mm(feature, feature_bank)
-    # [B, K]
-    sim_weight, sim_indices = sim_matrix.topk(k=knn_k, dim=-1)
-    # [B, K]
-    sim_labels = torch.gather(feature_labels.expand(feature.size(0), -1), dim=-1, index=sim_indices)
+    # get top knn_k values for every element of sim_matrix and the indices where in each tensor they are located
+    # in other words, for every element in the batch get the top sim scores
+    sim_weight, sim_indices = sim_matrix.topk(k=knn_k, dim=-1) # Nxknn_k tensor
+
+    # get the labels for the topk values found before
+    sim_labels = torch.gather(feature_labels.expand(feature.size(0), -1), dim=-1, index=sim_indices)    # Nxknn_k
+
     sim_weight = (sim_weight / knn_t).exp()
 
     # counts for each class
-    one_hot_label = torch.zeros(feature.size(0) * knn_k, classes, device=sim_labels.device)
+    one_hot_label = torch.zeros(feature.size(0) * knn_k, classes, device=sim_labels.device) # N*knn_k x classes
     # [B*K, C]
     one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1), value=1.0)
     # weighted score ---> [B, C]
