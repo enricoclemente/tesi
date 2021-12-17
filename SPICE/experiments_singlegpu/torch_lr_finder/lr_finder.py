@@ -402,7 +402,6 @@ class LRFinder(object):
             else:
                 total_loss += loss
 
-        # self.optimizer.zero_grad()
         self.optimizer.step()
 
         return total_loss.item()

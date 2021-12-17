@@ -33,10 +33,6 @@ from experiments_singlegpu.torch_lr_finder.lr_finder import LRFinder
 parser = argparse.ArgumentParser(description='PyTorch MoCo lr finder')
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
-parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
-                    help='path to results')
-parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/moco/logs',
-                    help='path to tensorboard logs')
 parser.add_argument('--batch-size', default=128, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
@@ -70,8 +66,6 @@ parser.add_argument('--moco-t', default=0.2, type=float,
 # options for moco v2
 parser.add_argument('--mlp', action='store_true',
                     help='use mlp head')
-parser.add_argument('--cos', action='store_true',
-                    help='use cosine lr schedule')
 
 # code from https://github.com/davidtvs/pytorch-lr-finder
 def main():
@@ -115,17 +109,19 @@ def main():
         dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
     # print(model)
 
-    torch.cuda.set_device(torch.cuda.current_device())
+    print(torch.cuda.get_device_name(0))
+    print(torch.cuda.get_device_name(1))
+    torch.cuda.set_device(0)
     model = model.cuda()
     
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    # optimizer = torch.optim.SGD(model.parameters(),     
-    #                             args.start_lr,
-    #                             momentum=args.momentum,
-    #                             weight_decay=args.weight_decay)
-    optimizer = torch.optim.Adam(model.parameters(), args.start_lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.SGD(model.parameters(),     
+                                args.start_lr,
+                                momentum=args.momentum,
+                                weight_decay=args.weight_decay)
+    # optimizer = torch.optim.Adam(model.parameters(), args.start_lr, weight_decay=args.weight_decay)
 
     lr_finder = LRFinder(model, optimizer, criterion)
     lr_finder.range_test(train_loader, end_lr=args.end_lr, num_iter=args.num_iter, step_mode="exp", accumulation_steps=1)

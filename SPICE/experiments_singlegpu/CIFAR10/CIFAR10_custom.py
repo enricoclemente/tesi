@@ -13,7 +13,8 @@
 from PIL import Image
 from torchvision.datasets import CIFAR10
 import numpy as np
-
+import matplotlib.pyplot as plt
+import torchvision.transforms as transforms
 
 """ We create a subclass of CIFAR10 Pytorch class 
     torchvision.datasets.CIFAR10(root: str, 
@@ -36,6 +37,18 @@ class CIFAR10Pair(CIFAR10):
         if self.transform is not None:
             im_1 = self.transform(img)
             im_2 = self.transform(img)
+        
+        # if index == 0:
+        #     fig = plt.figure()
+        #     plt.imshow(img)
+        #     plt.savefig("original_img.png")
+        #     fig = plt.figure()
+        #     plt.imshow(im_1.numpy().transpose([1, 2, 0]))
+        #     plt.savefig("transform_img1.png")
+        #     fig = plt.figure()
+        #     plt.imshow(im_1.numpy().transpose([1, 2, 0]))
+        #     plt.savefig("transform_img2.png")
+
 
         return im_1, im_2
     
