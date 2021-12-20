@@ -186,7 +186,7 @@ class MoCo(nn.Module):
         return logits, labels
 
 
-    def forward_singlegpu(self, im_q, im_k, eval=False):
+    def forward_singlegpu(self, im_q, im_k):
         """
         Input:
             im_q: a batch of query images
@@ -235,9 +235,8 @@ class MoCo(nn.Module):
 
         # labels: N positive key indicators 
         labels = torch.zeros(logits.shape[0], dtype=torch.long).cuda()
-
-        if self.single_gpu:
-            self._dequeue_and_enqueue_single_gpu(k)
+        
+        self._dequeue_and_enqueue_single_gpu(k)
 
         return logits, labels
 
@@ -250,7 +249,7 @@ class MoCo(nn.Module):
         Output:
             logits, targets
         """
-        
+        # print("called classic forward")
         self.encoder_k.train()
         self.encoder_q.train()
         # compute query features

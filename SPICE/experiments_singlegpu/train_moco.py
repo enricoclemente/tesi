@@ -109,11 +109,15 @@ def main_worker(args):
     model = moco.builder.MoCo(
         base_encoder=resnet18_cifar,
         dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
-    print(model)
+    # print(model)
 
     torch.cuda.set_device(torch.cuda.current_device())
     model = model.cuda()
-    
+    # print("New model's state_dict:")
+    # for param_tensor in model.state_dict():
+    #     print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+    # print(model.state_dict()['queue'])
+    # print(model.state_dict()['queue_ptr'])
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
@@ -135,6 +139,10 @@ def main_worker(args):
             print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
             print("=> last metrics where: '{}'".format(checkpoint['metrics']))
+            # print("Resume's state_dict:")
+            # for param_tensor in model.state_dict():
+            #     print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+            #     print(param_tensor, "\t", model.state_dict()[param_tensor])
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
@@ -195,6 +203,7 @@ def main_worker(args):
     test_writer = SummaryWriter(args.logs_folder + "/test")
     knn_test_writer = SummaryWriter(args.logs_folder + "/knn_test")
 
+    best_acc = 0.0
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, epoch, args)
         
@@ -208,19 +217,26 @@ def main_worker(args):
         knn_test_acc1 = knn_test(model.encoder_q, memory_loader, knn_test_loader, epoch, knn_test_writer, args)
         metrics['knn_test_acc@1'] = knn_test_acc1
 
-        if (epoch+1) % args.save_freq == 0:
-            # save_checkpoint({
-            #     'epoch': epoch + 1,
-            #     'arch': 'resnet18',
-            #     'state_dict': model.state_dict(),
-            #     'optimizer' : optimizer.state_dict(),
-            #     'metrics' : metrics,
-            # }, is_best=False, filename='{}/checkpoint_{:04d}.pth.tar'.format(args.save_folder, epoch))
+        if best_acc < metrics['training_acc@1']:
+            best_acc = metrics['training_acc@1']
+            # save the epoch with the best accuracy
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'arch': 'resnet18',
+                'state_dict': model.state_dict(),
+                'optimizer' : optimizer.state_dict(),
+                'metrics' : metrics,
+            }, is_best=False, filename='{}/checkpoint_best_epoch_{}.pth.tar'.format(args.save_folder, epoch))
 
+        if (epoch+1) % args.save_freq == 0:
             # remove old checkpoint. I not overwrite because if something goes wrong the one before
             # will be in the bin and could be restored
             if os.path.exists('{}/checkpoint_last.pth.tar'.format(args.save_folder)):
                 os.rename('{}/checkpoint_last.pth.tar'.format(args.save_folder), '{}/checkpoint_last-1.pth.tar'.format(args.save_folder))
+            # print("Save's state_dict:")
+            # for param_tensor in model.state_dict():
+            #     print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+            #     print(param_tensor, "\t", model.state_dict()[param_tensor])
 
             save_checkpoint({
                 'epoch': epoch + 1,
