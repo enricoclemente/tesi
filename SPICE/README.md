@@ -30,6 +30,7 @@ Assuming [Anaconda](https://www.anaconda.com/) with python 3.7, a step-by-step e
 conda install pytorch==1.6.0 torchvision==0.7.0 cudatoolkit=10.1 -c pytorch
 conda install -c conda-forge addict tensorboard python-lmdb
 conda install matplotlib scipy scikit-learn pillow
+conda install -c conda-forge tqdm
 ```
 
 Then, clone this repo
