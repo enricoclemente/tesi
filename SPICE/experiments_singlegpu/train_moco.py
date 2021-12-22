@@ -205,7 +205,11 @@ def main_worker(args):
 
     best_acc = 0.0
     for epoch in range(args.start_epoch, args.epochs):
-        adjust_learning_rate(optimizer, epoch, args)
+        
+        new_lr = adjust_learning_rate(optimizer, epoch, args)
+        train_writer.add_scalar('Learning rate/lr decay',
+                                new_lr,
+                                epoch)
         
         # train for one epoch
         metrics = train(train_loader, model, criterion, optimizer, epoch, train_writer, args)
@@ -507,6 +511,8 @@ def adjust_learning_rate(optimizer, epoch, args):
     print("new learning rate: {}".format(lr))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    
+    return lr
 
 
 def accuracy(output, target, topk=(1,)):
