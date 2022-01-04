@@ -1,3 +1,4 @@
 .DS_Store
 /SPICE/experiments_singlegpu/CIFAR10/data
 __pycache__
+prova.py 

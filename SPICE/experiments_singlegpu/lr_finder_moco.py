@@ -109,9 +109,7 @@ def main():
         dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
     # print(model)
 
-    print(torch.cuda.get_device_name(0))
-    print(torch.cuda.get_device_name(1))
-    torch.cuda.set_device(0)
+    torch.cuda.set_device(torch.cuda.current_device())
     model = model.cuda()
     
     # define loss function (criterion) and optimizer
@@ -124,13 +122,13 @@ def main():
     # optimizer = torch.optim.Adam(model.parameters(), args.start_lr, weight_decay=args.weight_decay)
 
     lr_finder = LRFinder(model, optimizer, criterion)
-    lr_finder.range_test(train_loader, end_lr=args.end_lr, num_iter=args.num_iter, step_mode="exp", accumulation_steps=1)
-    losses = lr_finder.history
-    print(losses)
-    lr_finder.save_plot(save_name="step_mode_exp__start_lr_" + str(args.start_lr) + "__end_lr_" + str(args.end_lr) + "__number_of_iterations_" + str(args.num_iter))
-    lr_finder.reset()
+    # lr_finder.range_test(train_loader, end_lr=args.end_lr, num_iter=args.num_iter, step_mode="exp", accumulation_steps=10)
+    # losses = lr_finder.history
+    # print(losses)
+    # lr_finder.save_plot(save_name="step_mode_exp__start_lr_" + str(args.start_lr) + "__end_lr_" + str(args.end_lr) + "__number_of_iterations_" + str(args.num_iter))
+    # lr_finder.reset()
 
-    lr_finder.range_test(train_loader, end_lr=args.end_lr, num_iter=args.num_iter, step_mode="linear", accumulation_steps=1)
+    lr_finder.range_test(train_loader, end_lr=args.end_lr, num_iter=args.num_iter, step_mode="linear", accumulation_steps=10)
     losses = lr_finder.history
     print(losses)
     lr_finder.save_plot(save_name="step_mode_linear__start_lr_" + str(args.start_lr) + "__end_lr_" + str(args.end_lr) + "__number_of_iterations_" + str(args.num_iter))

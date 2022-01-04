@@ -230,7 +230,7 @@ def main_worker(args):
                 'state_dict': model.state_dict(),
                 'optimizer' : optimizer.state_dict(),
                 'metrics' : metrics,
-            }, is_best=False, filename='{}/checkpoint_best_epoch_{}.pth.tar'.format(args.save_folder, epoch))
+            }, is_best=False, filename='{}/checkpoint_best.pth.tar'.format(args.save_folder))
 
         if (epoch+1) % args.save_freq == 0:
             # remove old checkpoint. I not overwrite because if something goes wrong the one before
@@ -508,7 +508,7 @@ def adjust_learning_rate(optimizer, epoch, args):
     else:  # stepwise lr schedule
         for milestone in args.schedule:
             lr *= 0.1 if epoch >= milestone else 1.
-    print("new learning rate: {}".format(lr))
+    # print("new learning rate: {}".format(lr))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     
