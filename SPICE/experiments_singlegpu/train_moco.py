@@ -431,7 +431,7 @@ def knn_predict(feature, feature_bank, feature_labels, classes, knn_k, knn_t):
     # in other words, for every element in the batch get the top sim scores
     sim_weight, sim_indices = sim_matrix.topk(k=knn_k, dim=-1) # Nxknn_k tensor
 
-    # get the labels for the topk values found before
+    # get the labels for the topk values found before 
     sim_labels = torch.gather(feature_labels.expand(feature.size(0), -1), dim=-1, index=sim_indices)    # Nxknn_k
 
     sim_weight = (sim_weight / knn_t).exp()
