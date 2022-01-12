@@ -280,14 +280,19 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
         # measure data loading time
         data_time.update(time.time() - end)
         
+        img1 = img1.cuda(non_blocking=True)
+        img2 = img2.cuda(non_blocking=True)
+
+        # upsample for resources calculation    
+        # upsample = torch.nn.Upsample(scale_factor=8)
+        # img1 = upsample(img1)
+        # img2 = upsample(img2)
+
         if epoch == 0 and i == 0:
             # first check
             print("batches dimensions")
             print(img1.size())
             print(img2.size())
-
-        img1= img1.cuda(non_blocking=True)
-        img2 = img2.cuda(non_blocking=True)
 
         # compute output
         output, target = model.forward_singlegpu(im_q=img1, im_k=img2)
@@ -425,7 +430,7 @@ def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
 # knn monitor as in InstDisc https://arxiv.org/abs/1805.01978
 # implementation follows http://github.com/zhirongw/lemniscate.pytorch and https://github.com/leftthomas/SimCLR
 def knn_predict(feature, feature_bank, feature_labels, classes, knn_k, knn_t):
-    # compute cos similarity between each feature vector and feature bank ---> Nx(dim of train dataset)
+    # compute cos similarity between each feature vector and feature bank ---> NxD(dim of train dataset)
     sim_matrix = torch.mm(feature, feature_bank)
     # get top knn_k values for every element of sim_matrix and the indices where in each tensor they are located
     # in other words, for every element in the batch get the top sim scores
@@ -438,9 +443,10 @@ def knn_predict(feature, feature_bank, feature_labels, classes, knn_k, knn_t):
 
     # counts for each class
     one_hot_label = torch.zeros(feature.size(0) * knn_k, classes, device=sim_labels.device) # N*knn_k x classes
-    # [B*K, C]
-    one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1), value=1.0)
-    # weighted score ---> [B, C]
+    
+    one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1), value=1.0) # N*knn_k x classes
+
+    # weighted score ---> Nxclasses
     pred_scores = torch.sum(one_hot_label.view(feature.size(0), -1, classes) * sim_weight.unsqueeze(dim=-1), dim=1)
 
     pred_labels = pred_scores.argsort(dim=-1, descending=True)

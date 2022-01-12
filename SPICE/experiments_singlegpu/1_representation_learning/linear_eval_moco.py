@@ -65,11 +65,11 @@ class Net(nn.Module):
         loc = 'cuda:{}'.format(torch.cuda.current_device())
         checkpoint = torch.load(pretrained_path, map_location=loc)
         self.load_state_dict(checkpoint['state_dict'], strict=False)
-        print(self.encoder_q.state_dict()['layer4.1.bn2.weight'])
+        # print(self.encoder_q.state_dict()['layer4.1.bn2.weight'])
 
         # remove the fc layer from encoder_q
         self.encoder_q = torch.nn.Sequential(*(list(self.encoder_q.children())[:-1]))
-        print(self.encoder_q.state_dict()['5.1.bn2.weight'])
+        # print(self.encoder_q.state_dict()['5.1.bn2.weight'])
 
         self.fc = nn.Linear(512, num_class, bias=True)
 
@@ -118,31 +118,19 @@ def main():
 
     # Data loading code
     CIFAR10_normalization = transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
-    
-    # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
-    # https://github.com/sthalles/SimCLR/blob/1848fc934ad844ae630e6c452300433fe99acfd9/data_aug/contrastive_learning_dataset.py#L8
-    mocov2_augmentation = [
-        transforms.RandomResizedCrop(32, scale=(0.2, 1.)),
-        transforms.RandomApply([
-            transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)  # not strengthened
-        ], p=0.8),
-        transforms.RandomGrayscale(p=0.2),
-        transforms.RandomApply([moco.loader.GaussianBlur([.1, 2.])], p=0.5),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        CIFAR10_normalization
-    ]
 
-    train_data = CIFAR10(root=args.dataset_folder, train=True, transform=transforms.Compose(mocov2_augmentation), download=True)
+    train_data = CIFAR10(root=args.dataset_folder, train=True, 
+                        transform=transforms.Compose([transforms.ToTensor(),CIFAR10_normalization]), download=True)
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=16, pin_memory=True)
-    test_data = CIFAR10(root=args.dataset_folder, train=False, transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalization]), download=True)
+    test_data = CIFAR10(root=args.dataset_folder, train=False, 
+                        transform=transforms.Compose([transforms.ToTensor(),CIFAR10_normalization]), download=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=16, pin_memory=True)
 
     moco_model = moco.builder.MoCo(
         base_encoder=resnet18_cifar,
         dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
 
+    # create new model with only query encoder
     model = Net(num_class=len(train_data.classes), moco_model=moco_model, pretrained_path=args.model_path).cuda()
 
     print(model)
@@ -161,8 +149,8 @@ def main():
                'test_loss': [], 'test_acc@1': [], 'test_acc@5': []}
 
     best_acc = 0.0
-    train_writer = SummaryWriter(args.logs_folder + "/linear_classifier_train")
-    test_writer = SummaryWriter(args.logs_folder + "/linear_classifier_test")
+    train_writer = SummaryWriter(args.logs_folder + "/train_linear_classifier")
+    test_writer = SummaryWriter(args.logs_folder + "/test_linear_classifier")
     for epoch in range(1, args.epochs + 1):
         train_loss, train_acc_1, train_acc_5 = train_val(model, train_loader, criterion, optimizer, epoch, args.epochs)
         results['train_loss'].append(train_loss)

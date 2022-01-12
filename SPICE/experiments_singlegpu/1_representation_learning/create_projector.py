@@ -81,11 +81,6 @@ parser.add_argument('--mlp', action='store_true',
 parser.add_argument('--cos', action='store_true',
                     help='use cosine lr schedule')
 
-# knn monitor
-parser.add_argument('--knn-k', default=200, type=int, help='k in kNN monitor')
-parser.add_argument('--knn-t', default=0.1, type=float, help='softmax temperature in kNN monitor; could be different with moco-t')
-
-
 
 def main():
     args = parser.parse_args()
@@ -141,31 +136,25 @@ def main_worker(args):
 
     cudnn.benchmark = True  # A bool that, if True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest.
 
-    # Data loading code
-    CIFAR10_normalization = transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
-    
-
-    # creating CIFAR10 datasets for knn test, here we need only to apply simple normalization
-    test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
-        transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalization]), 
-        download=True)
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
-        pin_memory=True)
-
     train_data = CIFAR10(root=args.dataset_folder, train=True, 
-        transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalization]),  
+        transform=transforms.Compose([transforms.ToTensor()]),  
         download=True)
     train_loader = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, shuffle=False, num_workers=1, 
         pin_memory=True)
 
+    test_data = CIFAR10(root=args.dataset_folder, train=False, 
+        transform=transforms.Compose([transforms.ToTensor()]), 
+        download=True)
+    test_loader = torch.utils.data.DataLoader(
+        test_data, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+        pin_memory=True)
+
+    
 
     # tensorboard plotter
-    train_writer = SummaryWriter(args.logs_folder + "/train")
-    test_writer = SummaryWriter(args.logs_folder + "/test")
+    train_writer = SummaryWriter(args.logs_folder + "/train_projector")
+    test_writer = SummaryWriter(args.logs_folder + "/test_projector")
 
     create_projector(model.encoder_q, train_loader, test_loader, train_writer, test_writer, args)
 
@@ -176,6 +165,7 @@ def create_projector(model, train_loader, test_loader, train_writer, test_writer
     with torch.no_grad():
         # generate feature bank from train dataset
         for data, target in train_loader:
+            # print(data.size())
             feature = model(data.cuda(non_blocking=True)) # for every sample in the batch let predict features NxC tensor
             feature = F.normalize(feature, dim=1)
             train_feature_bank.append(feature)    # create list of features [tensor1 (NxC), tensor2 (NxC), tensorM (NxC)] where M is the number of minibatches
@@ -195,9 +185,9 @@ def create_projector(model, train_loader, test_loader, train_writer, test_writer
                                                                     # for all the dataset DxC
         test_images_bank = torch.cat(test_images_bank, dim=0).contiguous()  # same for images
     
-    # statistics to be written at the end of every epoch
-    train_writer.add_embedding(train_feature_bank, train_images_bank) 
-    test_writer.add_embedding(test_feature_bank, test_images_bank)    
+    print("creating projectors")
+    train_writer.add_embedding(train_feature_bank, metadata=train_loader.dataset.targets, label_img=train_images_bank) 
+    test_writer.add_embedding(test_feature_bank, metadata=test_loader.dataset.targets, label_img=test_images_bank)    
 
 
 if __name__ == '__main__':
