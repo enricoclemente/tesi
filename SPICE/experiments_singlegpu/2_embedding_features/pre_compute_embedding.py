@@ -84,7 +84,7 @@ def main():
     
     train_data = CIFAR10(root=args.dataset_folder, train=True, 
                         transform=transforms.Compose([transforms.ToTensor(),CIFAR10_normalization]), download=True)
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=16, pin_memory=True)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=False, num_workers=16, pin_memory=True)
     # test_data = CIFAR10(root=args.dataset_folder, train=False, 
     #                     transform=transforms.Compose([transforms.ToTensor(),CIFAR10_normalization]), download=True)
     # test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=16, pin_memory=True)
@@ -113,7 +113,9 @@ def main():
             feature = model(data)
             # print(feature.shape)
             if len(feature.shape) == 4:
+                # make avg reducing the 3rd and 4th dimension to 1
                 feature = pool(feature)
+                # make two dimensional vector
                 feature = torch.flatten(feature, start_dim=1)
             # print(feature.shape)
             feature = F.normalize(feature, dim=1)

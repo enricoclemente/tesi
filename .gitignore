@@ -2,3 +2,4 @@
 /SPICE/experiments_singlegpu/datasets/
 __pycache__
 prova.py 
+*.out

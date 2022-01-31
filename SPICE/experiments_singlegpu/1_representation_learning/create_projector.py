@@ -84,7 +84,6 @@ parser.add_argument('--cos', action='store_true',
 
 def main():
     args = parser.parse_args()
-    print("train moco started with params")
     print(args)
 
     # setting of save_folder

@@ -124,7 +124,7 @@ model = dict(
 
 solver = dict(
     type="adam",
-    base_lr=0.005,
+    base_lr=0.005,  # lr
     bias_lr_factor=1,
     weight_decay=0,
     weight_decay_bias=0,

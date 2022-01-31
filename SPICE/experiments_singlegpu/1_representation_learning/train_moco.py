@@ -24,7 +24,7 @@ from spice.model.feature_modules.resnet_cifar import resnet18_cifar
 import moco.loader
 import moco.builder
 from torchvision.datasets import CIFAR10
-from experiments_singlegpu.CIFAR10.CIFAR10_custom import CIFAR10Pair
+from experiments_singlegpu.datasets.CIFAR10.CIFAR10_custom import CIFAR10Pair
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -108,7 +108,7 @@ def main_worker(args):
     # creating model MoCo using resnet18_cifar which is an implementation adapted for CIFAR10
     model = moco.builder.MoCo(
         base_encoder=resnet18_cifar,
-        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
+        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, single_gpu=True)
     # print(model)
 
     torch.cuda.set_device(torch.cuda.current_device())
@@ -147,6 +147,7 @@ def main_worker(args):
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     cudnn.benchmark = True  # A bool that, if True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest.
+
 
     # Data loading code
     CIFAR10_normalization = transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])

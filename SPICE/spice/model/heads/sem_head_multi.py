@@ -1,23 +1,35 @@
 import torch
 import torch.nn as nn
-from ..feature_modules.build_feature_module import build_feature_module
-
-import numpy as np
 import torch.nn.functional as F
-from spice.model.heads import build_head
+import numpy as np
 from spice.model.heads.sem_head import SemHead
 
-import matplotlib.pyplot as plt
 
+""" Wrapper for several Clustering Heads
+    parameters:
+    - multi_head: list(dictionary{...}, ....dictionary{...}) 
+                    for its structure see SemHead class which will use the elements of the list
+    - ratio_confident: ???
+    - num_neighbor: ???
+    - score_th: ???
 
+    attributes:
+    - num_heads: number of clustering heads 
+    - num_cluster: number of clusters
+    - center_ratio:  ??? ratio for selecting samples to use as clustering centers
+    - num_neighbor: ???
+    - ratio_confident: ???
+    - score_th: ???
+    - head_[h]: clustering head (SemHead)
+"""
 class SemHeadMulti(nn.Module):
     def __init__(self, multi_heads, ratio_confident=0.90, num_neighbor=100, score_th=0.99, **kwargs):
 
         super(SemHeadMulti, self).__init__()
 
-        self.num_heads = len(multi_heads)
-        self.num_cluster = multi_heads[0].num_cluster
-        self.center_ratio = multi_heads[0].center_ratio
+        self.num_heads = len(multi_heads) 
+        self.num_cluster = multi_heads[0].num_cluster   # use number of classes if you know
+        self.center_ratio = multi_heads[0].center_ratio # ? 
         self.num_neighbor = num_neighbor
         self.ratio_confident = ratio_confident
         self.score_th = score_th
@@ -65,6 +77,7 @@ class SemHeadMulti(nn.Module):
 
         return idx_select, labels_select
 
+    # get cluster centers
     def compute_cluster_proto(self, feas_sim, scores):
 
         _, idx_max = torch.sort(scores, dim=0, descending=True)
@@ -79,33 +92,39 @@ class SemHeadMulti(nn.Module):
         centers = torch.cat(centers, dim=0)
         return centers
 
-    def select_samples(self, feas_sim, scores, i):
+    # get prototype labels for every cluster head
+    def select_samples(self, features, scores, i):
         assert len(scores) == self.num_heads
-        idx_select = []
-        labels_select = []
+        
+        prototypes_indices = []
+        prototype_cluster_labels = []
         for h in range(self.num_heads):
-            idx_select_h, labels_select_h = self.__getattr__("head_{}".format(h)).select_samples(feas_sim, scores[h], i)
-            idx_select.append(idx_select_h)
-            labels_select.append(labels_select_h)
+            prototype_samples_indices, gt_cluster_labels = self.__getattr__("head_{}".format(h)).select_samples(features, scores[h], i)
+            prototypes_indices.append(prototype_samples_indices)
+            prototype_cluster_labels.append(gt_cluster_labels)
 
-        return idx_select, labels_select
+        return prototypes_indices, prototype_cluster_labels
 
-    def forward(self, fea, **kwargs):
-        cls_score = []
-        if isinstance(fea, list):
-            assert len(fea) == self.num_heads
+    # get for every head cluster score
+    def forward(self, features):
+        cluster_scores = []
+        if isinstance(features, list):
+            assert len(features) == self.num_heads
 
         for h in range(self.num_heads):
-            if isinstance(fea, list):
-                cls_socre_h = self.__getattr__("head_{}".format(h)).forward(fea[h])
+            if isinstance(features, list):
+                cluster_score_h = self.__getattr__("head_{}".format(h)).forward(features[h])
             else:
-                cls_socre_h = self.__getattr__("head_{}".format(h)).forward(fea)
+                # number of imagesxK tensor, K is number of clusters
+                cluster_score_h = self.__getattr__("head_{}".format(h)).forward(features)
 
-            cls_score.append(cls_socre_h)
+            cluster_scores.append(cluster_score_h)
 
-        return cls_score
+        # returns a list of NxK tensors
+        return cluster_scores
 
-    def loss(self, x, target, **kwargs):
+    # get loss from every cluster head
+    def loss(self, x, target):
         assert len(x) == self.num_heads
         assert len(target) == self.num_heads
 
