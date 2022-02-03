@@ -64,7 +64,7 @@ class SPICEModel(nn.Module):
         return features
 
 
-    # Function extracts probabilities from head that will be used to generate pseudo labels
+    # Function extracts probabilities that an image belong to a cluster
     # this function is forward with forward_type sem of the original Sim2Sem model
     # tensor [N,K]
     # TODO discover what sem stands for
