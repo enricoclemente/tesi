@@ -18,13 +18,15 @@ import torch.optim
 import torch.utils.data
 import torch.utils.data.distributed
 import torchvision.transforms as transforms
+
+from spice.config import Config
 from torch.utils.tensorboard import SummaryWriter
 from spice.model.feature_modules.resnet_cifar import resnet18_cifar
 
 import moco.loader
 import moco.builder
 from torchvision.datasets import CIFAR10
-from experiments_singlegpu.datasets.CIFAR10.CIFAR10_custom import CIFAR10Pair
+from code.SPICE.experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,10 +37,10 @@ parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar
                     help='path to dataset')
 parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
                     help='path to results')
+parser.add_argument('--resume', default='./results/cifar10/moco/checkpoint_last.pth.tar', type=str, metavar='PATH',
+                    help='path to latest checkpoint (default: none)')
 parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/moco/logs',
                     help='path to tensorboard logs')
-parser.add_argument('--run_id', default='exp1',
-                    help='id for creating tensorboard folder')
 parser.add_argument('--save-freq', default=1, type=int, metavar='N',
                     help='epoch frequency of saving model')
 parser.add_argument('--epochs', default=1000, type=int, metavar='N',
@@ -61,9 +63,6 @@ parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     dest='weight_decay')
 parser.add_argument('--print-freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
-parser.add_argument('--resume', default='./results/cifar10/moco/checkpoint_last.pth.tar', type=str, metavar='PATH',
-                    help='path to latest checkpoint (default: none)')
-
 
 # moco specific configs:
 parser.add_argument('--moco-dim', default=128, type=int,
@@ -91,6 +90,7 @@ def main():
     args = parser.parse_args()
     print("train moco started with params")
     print(args)
+    
 
     # setting of save_folder
     if not os.path.exists(args.save_folder):
@@ -108,7 +108,7 @@ def main_worker(args):
     # creating model MoCo using resnet18_cifar which is an implementation adapted for CIFAR10
     model = moco.builder.MoCo(
         base_encoder=resnet18_cifar,
-        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, single_gpu=True)
+        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp)
     # print(model)
 
     torch.cuda.set_device(torch.cuda.current_device())

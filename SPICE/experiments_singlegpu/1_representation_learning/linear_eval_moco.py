@@ -1,11 +1,13 @@
 #!/usr/bin/env python
-import sys
-sys.path.insert(0, './')
 import argparse
+import sys
+import os
+sys.path.insert(0, './')
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.backends.cudnn as cudnn
 # from thop import profile, clever_format
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10
@@ -34,47 +36,25 @@ parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
 parser.add_argument('--epochs', type=int, default=100, help='Number of sweeps over the dataset to train')
-parser.add_argument('--moco-dim', default=128, type=int,
-                    help='feature dimension (default: 128)')
-parser.add_argument('--moco-k', default=65536, type=int,
-                    help='queue size; number of negative keys (default: 65536)')
-parser.add_argument('--moco-m', default=0.999, type=float,
-                    help='moco momentum of updating key encoder (default: 0.999)')
-parser.add_argument('--moco-t', default=0.2, type=float,
-                    help='softmax temperature (default: 0.07)')
 
-# options for moco v2
-parser.add_argument('--mlp', action='store_true',
-                    help='use mlp head')
 
 
 class Net(nn.Module):
-    def __init__(self, num_class, moco_model, pretrained_path):
+    def __init__(self, num_class, feature_model):
         super(Net, self).__init__()
 
-        # take query encoder of moco
-        self.encoder_q = moco_model.encoder_q
-        # classifier
-        # linear_in_features = self.encoder_q.fc.in_features
+        # remove the fc layer from encoder
+        self.encoder = torch.nn.Sequential(*(list(feature_model.children())[:-1]))
 
-        for param_tensor in self.encoder_q.state_dict():
-            print(param_tensor, "\t", self.encoder_q.state_dict()[param_tensor].size())
-        print(self.encoder_q.state_dict()['layer4.1.bn2.weight'])
+        # freeze encoder parameters
+        for param in self.encoder.parameters():
+            param.requires_grad = False
 
-        # load trained parameters
-        loc = 'cuda:{}'.format(torch.cuda.current_device())
-        checkpoint = torch.load(pretrained_path, map_location=loc)
-        self.load_state_dict(checkpoint['state_dict'], strict=False)
-        # print(self.encoder_q.state_dict()['layer4.1.bn2.weight'])
-
-        # remove the fc layer from encoder_q
-        self.encoder_q = torch.nn.Sequential(*(list(self.encoder_q.children())[:-1]))
-        # print(self.encoder_q.state_dict()['5.1.bn2.weight'])
-
+        # new fc to be trained and used to classification
         self.fc = nn.Linear(512, num_class, bias=True)
 
     def forward(self, x):
-        x = self.encoder_q(x)
+        x = self.encoder(x)
         feature = torch.flatten(x, start_dim=1)
         out = self.fc(feature)
         return out
@@ -121,27 +101,31 @@ def main():
 
     train_data = CIFAR10(root=args.dataset_folder, train=True, 
                         transform=transforms.Compose([transforms.ToTensor(),CIFAR10_normalization]), download=True)
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=16, pin_memory=True)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
     test_data = CIFAR10(root=args.dataset_folder, train=False, 
                         transform=transforms.Compose([transforms.ToTensor(),CIFAR10_normalization]), download=True)
-    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=16, pin_memory=True)
+    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=1, pin_memory=True)
 
-    moco_model = moco.builder.MoCo(
-        base_encoder=resnet18_cifar,
-        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
+    encoder = resnet18_cifar()
+
+    if os.path.isfile(args.model_path):
+        loc = 'cuda:{}'.format(torch.cuda.current_device())
+        checkpoint = torch.load(args.model_path, map_location=loc)
+        state_dict = dict()
+        for key in checkpoint:
+            if key.startswith("module.feature_module"):
+                # print(key[22:])
+                state_dict[key[22:]] = checkpoint[key]
+        
+        encoder.load_state_dict(state_dict, strict=False)
+    else:
+        raise NotImplementedError("You must use a pretrained feature model")
 
     # create new model with only query encoder
-    model = Net(num_class=len(train_data.classes), moco_model=moco_model, pretrained_path=args.model_path).cuda()
-
+    model = Net(num_class=len(train_data.classes), feature_model=encoder).cuda()
     print(model)
 
-    for param in model.encoder_q.parameters():
-        param.requires_grad = False
-
-    # flops, params = profile(model, inputs=(torch.randn(1, 3, 32, 32).cuda(),))
-    # flops, params = clever_format([flops, params])
-
-    # print('# Model Params: {} FLOPs: {}'.format(params, flops))
+    cudnn.benchmark = True
 
     optimizer = optim.Adam(model.fc.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     criterion = nn.CrossEntropyLoss().cuda()

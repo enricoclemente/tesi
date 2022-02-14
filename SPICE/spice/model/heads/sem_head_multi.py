@@ -37,35 +37,59 @@ class SemHeadMulti(nn.Module):
             head_h = SemHead(**multi_heads[h])
             self.__setattr__("head_{}".format(h), head_h)
 
-    def local_consistency(self, feas_sim, scores):
+    # Function get reliable samples
+    # return the reliable images and relative labels (classified clusters)
+    # 
+    def local_consistency(self, features, scores):
+        # take the best scores = cluster label predictions
         labels_pred = scores.argmax(dim=1).cpu()
-        sim_mtx = torch.einsum('nd,cd->nc', [feas_sim.cpu(), feas_sim.cpu()])
+        # compute similarity matrix between features and features
+        # tensor [N,N]
+        sim_mtx = torch.einsum('nd,cd->nc', [features.cpu(), features.cpu()])
+        # the top k will retrieve in this case as first element always the diagonal indices
         scores_k, idx_k = sim_mtx.topk(k=self.num_neighbor, dim=1)
+        
+        # take for every sample the neighbors and their prediction,
+        # the first column will be the image itself because 
         labels_samples = torch.zeros_like(idx_k)
         for s in range(self.num_neighbor):
             labels_samples[:, s] = labels_pred[idx_k[:, s]]
 
+        # get neighbors that have been classified in the same cluster
         true_mtx = labels_samples[:, 0:1] == labels_samples
+        # how many neighbors have been classified in the same cluster (including the image itself)
         num_true = true_mtx.sum(dim=1)
+        
+        # which samples have the number of neighbors with the same cluster that are over a certain threshold
         idx_true = num_true >= self.num_neighbor * self.ratio_confident
-        print(num_true.min())
+        # print(num_true.min())
+
+        # confident samples: which samples get the clustering score above score_th value
         idx_conf = scores.max(dim=1)[0].cpu() > self.score_th
+        # get if confident samples have also a certain number of neighbor classified in the same cluster
         idx_true = idx_true * idx_conf
+        # select the samples which are both confident and with also neighbor in the same cluster
         idx_select = torch.where(idx_true > 0)[0]
+        # select the clustering predictions of hte previous selected samples
         labels_select = labels_pred[idx_select]
 
         num_per_cluster = []
         idx_per_cluster = []
         label_per_cluster = []
         for c in range(self.num_cluster):
+            # for the i-th cluster which selected images belong to that cluster
             idx_c = torch.where(labels_select == c)[0]
+            # put for the i-th cluster the relative images classified in
             idx_per_cluster.append(idx_select[idx_c])
             num_per_cluster.append(len(idx_c))
+            # put for the i-th cluster the relative labels (cluster index) of the selected images
             label_per_cluster.append(labels_select[idx_c])
 
         idx_per_cluster_select = []
         label_per_cluster_select = []
+        # which cluster has the smallest number of samples
         min_cluster = np.array(num_per_cluster).min()
+        # for every cluster select min_cluster images and shuffle the order of them
         for c in range(self.num_cluster):
             idx_shuffle = np.arange(0, num_per_cluster[c])
             np.random.shuffle(idx_shuffle)
@@ -75,6 +99,7 @@ class SemHeadMulti(nn.Module):
         idx_select = torch.cat(idx_per_cluster_select)
         labels_select = torch.cat(label_per_cluster_select)
 
+        # return the reliable images and relative labels (classified clusters)
         return idx_select, labels_select
 
     # get cluster centers
@@ -92,6 +117,7 @@ class SemHeadMulti(nn.Module):
         centers = torch.cat(centers, dim=0)
         return centers
 
+
     # get prototype labels for every cluster head
     def select_samples(self, features, scores, i):
         assert len(scores) == self.num_heads
@@ -105,7 +131,11 @@ class SemHeadMulti(nn.Module):
 
         return prototypes_indices, prototype_cluster_labels
 
-    # get for every head cluster score
+
+    # Function get for every head cluster score
+    # returns: list of tensors [N,K] 
+    #           N=number of images k=number of clusters, 
+    #           len of list == number of clustering heads
     def forward(self, features):
         cluster_scores = []
         if isinstance(features, list):
@@ -115,15 +145,16 @@ class SemHeadMulti(nn.Module):
             if isinstance(features, list):
                 cluster_score_h = self.__getattr__("head_{}".format(h)).forward(features[h])
             else:
-                # number of imagesxK tensor, K is number of clusters
+                # tensor [N, K], K is number of clusters
                 cluster_score_h = self.__getattr__("head_{}".format(h)).forward(features)
 
             cluster_scores.append(cluster_score_h)
 
-        # returns a list of NxK tensors
         return cluster_scores
 
-    # get loss from every cluster head
+
+    # Function loss from every cluster head
+    # returns: list of losses
     def loss(self, x, target):
         assert len(x) == self.num_heads
         assert len(target) == self.num_heads

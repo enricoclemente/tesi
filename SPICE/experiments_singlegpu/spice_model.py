@@ -29,10 +29,9 @@ class SPICEModel(nn.Module):
         
 
     def forward(self, images, targets):
-        
         return 0
     
-    # compute loss between images and targets
+    # Function compute loss between images and targets
     def loss(self, images, targets):
         if isinstance(images, list):
             features = []
@@ -50,7 +49,8 @@ class SPICEModel(nn.Module):
         return self.head.loss(features, targets)
     
 
-    # use only feature_module to extract features
+    # Function extract features using feature_module
+    # returns: tensor [N,C] N=number of images, C=number of features
     def extract_only_features(self, images):
         pool = nn.AdaptiveAvgPool2d(1)
 
@@ -66,8 +66,7 @@ class SPICEModel(nn.Module):
 
     # Function extracts probabilities that an image belong to a cluster
     # this function is forward with forward_type sem of the original Sim2Sem model
-    # tensor [N,K]
-    # TODO discover what sem stands for
+    # returns: tensor [N,K] N=number of images, K=number of cluster
     def sem(self, images):
         if isinstance(images, list):
             features = []
@@ -84,8 +83,15 @@ class SPICEModel(nn.Module):
 
         return self.head.forward(features)
     
+
     # Function get prototype labels
     # this function is forward with forward_type sim2sem of the original Sim2Sem model
     def sim2sem(self, features, scores, epoch):
         return self.head.select_samples(features, scores, epoch)
+    
+
+    # Function get reliable pseudo-labels
+    # this function is forward with forward_type local_consistency of the original Sim2Sem model
+    def local_consistency(self, features, scores):
+        return self.head.local_consistency(features, scores)
         

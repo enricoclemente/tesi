@@ -1,11 +1,11 @@
-batch_size = 5000
+batch_size = 1000
 
 target_sub_batch_size = 100
 
-train_sub_batch_size = 128
+train_sub_batch_size = 256
 num_repeat = 8
 
-test_batch_size = 100
+test_batch_size = 256
 
 
 dataset = dict(

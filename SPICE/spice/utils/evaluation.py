@@ -17,8 +17,8 @@ def calculate_acc(ypred, y, return_idx=False):
     This function construct a N-by-N cost matrix, then pass it to scipy.optimize.linear_sum_assignment to solve the assignment problem.
 
     """
-    assert len(y) > 0
-    assert len(np.unique(ypred)) == len(np.unique(y))
+    assert len(y) > 0, 'Length of ground truth labels must be > 0'
+    assert len(np.unique(ypred)) == len(np.unique(y)), 'Number of unique predictions msut be equal to the number of unique ground truth labels'
 
     s = np.unique(ypred)
     t = np.unique(y)

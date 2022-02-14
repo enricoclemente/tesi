@@ -23,7 +23,7 @@ import numpy as np
 from spice.config import Config
 from spice.data.augment import Augment, Cutout
 from torchvision.datasets import CIFAR10
-from experiments_singlegpu.datasets.CIFAR10.CIFAR10_custom import CIFAR10Pair
+from code.SPICE.experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
 
 import moco.builder
 from spice.model.feature_modules.resnet_cifar import resnet18_cifar
@@ -47,7 +47,7 @@ parser.add_argument("--config_file", default="./configs/stl10/spice_self.py", me
 # arguments for saving and resuming
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
-parser.add_argument('--pretrained_self_supervised_folder', default='./results/cifar10/moco/checkpoint_last.pth.tar', type=str, metavar='PATH',
+parser.add_argument('--pretrained_self_supervised_model', default='./results/cifar10/moco/checkpoint_last.pth.tar', type=str, metavar='PATH',
                     help='path to self-supervised checkpoint to take its weigths')
 parser.add_argument('--resume', default='./results/cifar10/moco/checkpoint_last.pth.tar', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
@@ -67,6 +67,8 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 # optimizer
 parser.add_argument('--lr', '--learning-rate', default=0.005, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
+parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
+                    metavar='W', help='weight decay (default: 1e-4)')
 
 
 def main():
@@ -93,7 +95,7 @@ def main():
         # if it's the first time, load weights of the self-supervised model
         # when is resumed it is not necessary since they will be resumed for all spice model later
         loc = 'cuda:{}'.format(torch.cuda.current_device())
-        checkpoint = torch.load(args.pretrained_self_supervised_folder, map_location=loc)
+        checkpoint = torch.load(args.pretrained_self_supervised_model, map_location=loc)
         moco_model.load_state_dict(checkpoint['state_dict'])
 
     # print(moco_model)
@@ -110,7 +112,7 @@ def main():
     model.cuda()
 
     # optimizer only for Clustering Head
-    optimizer = torch.optim.Adam(model.head.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.head.parameters(), lr=args.lr, weight_decay=args.wd)
 
 
     if args.resume:
@@ -129,6 +131,7 @@ def main():
 
     # print(model.feature_module.state_dict()['5.1.bn2.weight'])
 
+   
     CIFAR10_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)
     
     # weak augmentation
@@ -162,7 +165,8 @@ def main():
         num_workers=1, pin_memory=True, drop_last=True)
     
     # training dataset with non augmented images
-    train_original_images = CIFAR10(root=args.dataset_folder, train=True, 
+    train_original_images = CIFAR10(root=args.dataset_folder, 
+        train=True, 
         transform=transforms.Compose([transforms.ToTensor(),
                                     CIFAR10_normalization]),
         download=True)
@@ -278,7 +282,9 @@ def main():
 
                 try:
                     acc = calculate_acc(pred_labels_h, gt_labels)
-                except:
+                except AssertionError as msg:
+                    print("Clustering Accuracy failed: ") 
+                    print(msg)
                     acc = -1
 
                 nmi = calculate_nmi(pred_labels_h, gt_labels)
@@ -558,6 +564,7 @@ def train(train_loader, train_original_images_loader, model, optimizer, epoch, t
         # tensor [K*num images per cluster], tensor [K*num images per cluster]
         prototype_samples_indices, gt_cluster_labels = model.sim2sem(original_images_features_all, scores, epoch)
 
+
         # M-Step based on SPICE paper
         strong_augmented_images_prototypes = []
         for h in range(num_heads):
@@ -572,10 +579,9 @@ def train(train_loader, train_original_images_loader, model, optimizer, epoch, t
 
         # create list [0, 1, 2, ... num_images-1]
         images_prototypes_indices = list(range(num_images))
+        
         # Select a set of images for training.
-
         num_train = num_images
-
         train_sub_iters = num_train // train_sub_batch_size
 
         print("Training clustering head with previously extracted prototypes")
@@ -595,7 +601,7 @@ def train(train_loader, train_original_images_loader, model, optimizer, epoch, t
                 targets_i = []
 
                 for h in range(num_heads):
-                    # take a portion of images and relative target (in which cluster should be classified)
+                    # take a portion of images and relative target (in which cluster the images should be classified)
                     imgs_i.append(strong_augmented_images_prototypes[h][images_prototypes_indices_i, :, :, :].cuda(non_blocking=True))
                     targets_i.append(gt_cluster_labels[h][images_prototypes_indices_i].cuda(non_blocking=True))
 

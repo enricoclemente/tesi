@@ -1,5 +1,8 @@
 .DS_Store
-/SPICE/experiments_singlegpu/datasets/
+/SPICE/experiments_singlegpu/datasets/CIFAR10
+/SPICE/experiments_singlegpu/datasets/EMOTIC
+/SPICE/experiments_singlegpu/datasets/SUN397
+/SPICE/experiments_singlegpu/datasets/OxfordIII-TPet
 __pycache__
 prova.py 
 *.out
