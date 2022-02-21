@@ -3,6 +3,7 @@
 /SPICE/experiments_singlegpu/datasets/EMOTIC
 /SPICE/experiments_singlegpu/datasets/SUN397
 /SPICE/experiments_singlegpu/datasets/OxfordIII-TPet
+/SPICE/experiments_singlegpu/datasets/Selfie-Image-Detection-Dataset
 __pycache__
 prova.py 
 *.out
