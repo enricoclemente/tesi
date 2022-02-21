@@ -6,6 +6,7 @@ import os
 import shutil
 import time
 import sys
+from xmlrpc.client import Boolean
 sys.path.insert(0, './')
 
 import torch
@@ -16,73 +17,77 @@ import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
-import torch.utils.data.distributed
-import torchvision.transforms as transforms
+
 
 from spice.config import Config
 from torch.utils.tensorboard import SummaryWriter
+
+import torchvision.models as models
 from spice.model.feature_modules.resnet_cifar import resnet18_cifar
+
 
 import moco.loader
 import moco.builder
+
+import torchvision.transforms as transforms
+from experiments_singlegpu.datasets.custom_transforms import PadToSquare
 from torchvision.datasets import CIFAR10
-from code.SPICE.experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
+from experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
+from experiments_singlegpu.datasets.EMOTIC_custom import EMOTIC, EMOTICPair
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 parser = argparse.ArgumentParser(description='PyTorch MoCo Training')
+parser.add_argument("--config_file", default="./exp_configs.py", metavar="FILE",
+                    help="path to config file", type=str)
+# arguments for saving and resuming                   
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
-parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
-                    help='path to results')
 parser.add_argument('--resume', default='./results/cifar10/moco/checkpoint_last.pth.tar', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
+parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
+                    help='path to results')
 parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/moco/logs',
                     help='path to tensorboard logs')
+
+# running logistics
 parser.add_argument('--save-freq', default=1, type=int, metavar='N',
-                    help='epoch frequency of saving model')
+                    help='epoch frequency of saving model and plotting')
+parser.add_argument('--print-freq', default=10, type=int,
+                    metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--epochs', default=1000, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
+
+# training hyperparams
 parser.add_argument('--batch-size', default=128, type=int,
                     metavar='N',
-                    help='mini-batch size (default: 256), this is the total '
-                         'batch size of all GPUs on the current node when '
-                         'using Data Parallel or Distributed Data Parallel')
+                    help='mini-batch size (default: 128)')
+
 parser.add_argument('--lr', '--learning-rate', default=0.015, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--schedule', default=[120, 160], nargs='*', type=int,
                     help='learning rate schedule (when to drop lr by 10x)')
+parser.add_argument('--cos', action='store_true',
+                    help='use cosine lr schedule')
+parser.add_argument('--keep-lr', default=False, type=Boolean, 
+                    help='use it after a complete training with cosine lr schedule in order to keep the last lr value fixed')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum of SGD solver')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
-parser.add_argument('--print-freq', default=10, type=int,
-                    metavar='N', help='print frequency (default: 10)')
-
-# moco specific configs:
-parser.add_argument('--moco-dim', default=128, type=int,
-                    help='feature dimension (default: 128)')
-parser.add_argument('--moco-k', default=65536, type=int,
-                    help='queue size; number of negative keys (default: 65536)')
-parser.add_argument('--moco-m', default=0.999, type=float,
-                    help='moco momentum of updating key encoder (default: 0.999)')
-parser.add_argument('--moco-t', default=0.2, type=float,
-                    help='softmax temperature (default: 0.07)')
-
-# options for moco v2
-parser.add_argument('--mlp', action='store_true',
-                    help='use mlp head')
-parser.add_argument('--cos', action='store_true',
-                    help='use cosine lr schedule')
 
 # knn monitor
 parser.add_argument('--knn-k', default=200, type=int, help='k in kNN monitor')
 parser.add_argument('--knn-t', default=0.1, type=float, help='softmax temperature in kNN monitor; could be different with moco-t')
+
+# dataset
+parser.add_argument('--dataset', default="cifar10", type=str,
+                    help="name of the dataset, this lead to different script choices")
 
 
 
@@ -90,7 +95,7 @@ def main():
     args = parser.parse_args()
     print("train moco started with params")
     print(args)
-    
+    cfg = Config.fromfile(args.config_file)
 
     # setting of save_folder
     if not os.path.exists(args.save_folder):
@@ -101,23 +106,96 @@ def main():
         raise NotImplementedError("You need GPU!")
     print("Use GPU: {} for training".format(torch.cuda.current_device()))
 
-    main_worker(args)
-
-
-def main_worker(args):
-    # creating model MoCo using resnet18_cifar which is an implementation adapted for CIFAR10
-    model = moco.builder.MoCo(
-        base_encoder=resnet18_cifar,
-        dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp)
-    # print(model)
-
     torch.cuda.set_device(torch.cuda.current_device())
+
+    base_encoder = models.resnet18
+    train_daset = None
+    test_dataset = None
+    knn_test_dataset = None
+    original_train_dataset = None
+    mocov2_augmentation = None
+    dataset_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)
+    
+    # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
+    # https://github.com/sthalles/SimCLR/blob/1848fc934ad844ae630e6c452300433fe99acfd9/data_aug/contrastive_learning_dataset.py#L8
+    mocov2_augmentation = [
+        transforms.RandomResizedCrop(cfg.dataset.img_size, scale=(0.2, 1.)),
+        transforms.RandomApply([
+            transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)  # not strengthened
+        ], p=0.8),
+        transforms.RandomGrayscale(p=0.2),
+        transforms.RandomApply([moco.loader.GaussianBlur([.1, 2.])], p=0.5),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        dataset_normalization
+        ]
+    if args.dataset == 'cifar10':
+        # resnet18_cifar which is an implementation adapted for CIFAR10
+        base_encoder = resnet18_cifar
+
+        # creating CIFAR10 train and test dataset from custom CIFAR10Pair class 
+        # which gave pair augmentation of image
+        train_dataset = CIFAR10Pair(root=args.dataset_folder, train=True, 
+            transform=transforms.Compose(mocov2_augmentation), 
+            download=True)
+        test_dataset = CIFAR10Pair(root=args.dataset_folder, train=False, 
+            transform=transforms.Compose(mocov2_augmentation), 
+            download=True)
+
+        # creating CIFAR10 datasets for knn test
+        knn_test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
+            transform=transforms.Compose([transforms.ToTensor(),
+                                        dataset_normalization]), 
+            download=True)
+        original_train_dataset = CIFAR10(root=args.dataset_folder, train=True, 
+            transform=transforms.Compose([transforms.ToTensor(),
+                                        dataset_normalization]),  
+            download=True)
+        original_train_loader = torch.utils.data.DataLoader(
+            original_train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+            pin_memory=True)
+
+
+    elif args.dataset == 'emotic':
+        # base resnet18 encoder since using images of the same size of ImageNet
+        base_encoder = models.resnet18
+
+        resize_transform = [PadToSquare(),    # apply padding to make images squared
+                            transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size])]
+        # creating EMOTIC train and test dataset from custom EMOTICPair class 
+        # which gave pair augmentation of image
+        train_dataset = EMOTICPair(root=args.dataset_folder, split=["train", "val"], 
+                                    transform=transforms.Compose(
+                                                resize_transform +
+                                                mocov2_augmentation))
+        test_dataset = EMOTICPair(root=args.dataset_folder, split="test", 
+                                    transform=transforms.Compose(
+                                                resize_transform +
+                                                mocov2_augmentation))
+
+        # creating EMOTIC datasets for knn test
+        knn_test_dataset = EMOTIC(root=args.dataset_folder, split="test", 
+                                    transform=transforms.Compose( 
+                                                resize_transform + [
+                                                transforms.ToTensor(),
+                                                dataset_normalization]))
+        original_train_dataset = EMOTIC(root=args.dataset_folder, split=["train", "val"], 
+                                    transform=transforms.Compose(
+                                                resize_transform + [
+                                                transforms.ToTensor(),
+                                                dataset_normalization]))
+    else:
+        raise NotImplementedError("You must choose a valid dataset!")
+
+
+    # creating model MoCo 
+    model = moco.builder.MoCo(
+        base_encoder=base_encoder,
+        dim=cfg.moco.moco_dim, K=cfg.moco.moco_k, m=cfg.moco.moco_m, T=cfg.moco.moco_t, mlp=cfg.moco.mlp)
+    print(model)
+    
     model = model.cuda()
-    # print("New model's state_dict:")
-    # for param_tensor in model.state_dict():
-    #     print(param_tensor, "\t", model.state_dict()[param_tensor].size())
-    # print(model.state_dict()['queue'])
-    # print(model.state_dict()['queue_ptr'])
+    
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
@@ -148,54 +226,21 @@ def main_worker(args):
 
     cudnn.benchmark = True  # A bool that, if True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest.
 
-
-    # Data loading code
-    CIFAR10_normalization = transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
-    
-    # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
-    # https://github.com/sthalles/SimCLR/blob/1848fc934ad844ae630e6c452300433fe99acfd9/data_aug/contrastive_learning_dataset.py#L8
-    mocov2_augmentation = [
-        transforms.RandomResizedCrop(32, scale=(0.2, 1.)),
-        transforms.RandomApply([
-            transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)  # not strengthened
-        ], p=0.8),
-        transforms.RandomGrayscale(p=0.2),
-        transforms.RandomApply([moco.loader.GaussianBlur([.1, 2.])], p=0.5),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        CIFAR10_normalization
-    ]
-    
-    # creating CIFAR10 train and test dataset from custom CIFAR10 class
-    train_dataset = CIFAR10Pair(root=args.dataset_folder, train=True, 
-        transform=transforms.Compose(mocov2_augmentation), 
-        download=True)
+   
+    # creating dataset loaders
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True, drop_last=True)
-    test_dataset = CIFAR10Pair(root=args.dataset_folder, train=False, 
-        transform=transforms.Compose(mocov2_augmentation), 
-        download=True)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
         pin_memory=True)
 
-
-    # creating CIFAR10 datasets for knn test, here we need only to apply simple normalization
-    knn_test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
-        transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalization]), 
-        download=True)
+    # creating CIFAR10 datasets for knn test
     knn_test_loader = torch.utils.data.DataLoader(
         knn_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
         pin_memory=True)
-
-    memory_data = CIFAR10(root=args.dataset_folder, train=True, 
-        transform=transforms.Compose([transforms.ToTensor(),
-                                    CIFAR10_normalization]),  
-        download=True)
-    memory_loader = torch.utils.data.DataLoader(
-        memory_data, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+    original_train_loader = torch.utils.data.DataLoader(
+        original_train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
         pin_memory=True)
 
 
@@ -215,12 +260,13 @@ def main_worker(args):
         # train for one epoch
         metrics = train(train_loader, model, criterion, optimizer, epoch, train_writer, args)
 
-        test_acc1, test_acc5 = test(test_loader, model, criterion, epoch, test_writer, args)
-        metrics['test_acc@1'] = test_acc1
-        metrics['test_acc@5'] = test_acc5
+        # test seems not the best since it uses the same queue of train samples
+        # test_acc1, test_acc5 = test(test_loader, model, criterion, epoch, test_writer, args)
+        # metrics['test_acc@1'] = test_acc1
+        # metrics['test_acc@5'] = test_acc5
 
-        knn_test_acc1 = knn_test(model.encoder_q, memory_loader, knn_test_loader, epoch, knn_test_writer, args)
-        metrics['knn_test_acc@1'] = knn_test_acc1
+        if args.dataset != "emotic":    # with emotic targets are not simple classes so knn cannot be computed as for other datasets
+            metrics['knn_test_acc@1'] = knn_test(model.encoder_q, original_train_loader, knn_test_loader, epoch, knn_test_writer, args)
 
         if best_acc < metrics['training_acc@1']:
             best_acc = metrics['training_acc@1']
@@ -291,7 +337,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
 
         if epoch == 0 and i == 0:
             # first check
-            print("batches dimensions")
+            print("First iteration: batches dimensions")
             print(img1.size())
             print(img2.size())
 
@@ -510,12 +556,16 @@ class ProgressMeter(object):
 def adjust_learning_rate(optimizer, epoch, args):
     """Decay the learning rate based on schedule"""
     lr = args.lr
-    if args.cos:  # cosine lr schedule
-        lr *= 0.5 * (1. + math.cos(math.pi * epoch / args.epochs))
-    else:  # stepwise lr schedule
-        for milestone in args.schedule:
-            lr *= 0.1 if epoch >= milestone else 1.
-    # print("new learning rate: {}".format(lr))
+    if args.keep_lr:    # if you want to continue training after cosine schedule cycle completed 
+                        # keeping fixed the last lr value
+        lr = optimizer.param_groups[0]['lr']
+    else:
+        if args.cos:  # cosine lr schedule
+            lr *= 0.5 * (1. + math.cos(math.pi * epoch / args.epochs))
+        else:  # stepwise lr schedule
+            for milestone in args.schedule:
+                lr *= 0.1 if epoch >= milestone else 1.
+
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     

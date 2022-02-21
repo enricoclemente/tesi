@@ -6,19 +6,21 @@ from typing import Any, Callable, List, Optional, Union, Tuple
 import scipy.io
 from PIL import Image
 
-"""
-        EMOTions In Context (EMOTIC) Dataset implementation for pytorch
-        site: http://sunai.uoc.edu/emotic/
-        paper: http://sunai.uoc.edu/emotic/pdf/emotic_pami2019.pdf
-        The dataset is focused on emotions in context
-        The dataset is split in train, val, and test (respectively 70%, 10%, 20%)
+import numpy as np
 
-        Annotations are made for each person in the image and are the following:
-        - bounding box: (x,y) starting point, width and height
-        - emotion categories: there are 26 different emotion categories
-        - continuous dimensions: emotions classified by VAD (Valence, Arousal and Dominance) model, 1 value for each dimension
-        - person gender
-        - person age
+"""
+    EMOTions In Context (EMOTIC) Dataset implementation for pytorch
+    site: http://sunai.uoc.edu/emotic/
+    paper: http://sunai.uoc.edu/emotic/pdf/emotic_pami2019.pdf
+    The dataset is focused on emotions in context
+    The dataset is split in train, val, and test (respectively 70%, 10%, 20%)
+
+    Annotations are made for each person in the image and are the following:
+    - bounding box: (x,y) starting point, width and height
+    - emotion categories: there are 26 different emotion categories
+    - continuous dimensions: emotions classified by VAD (Valence, Arousal and Dominance) model, 1 value for each dimension
+    - person gender
+    - person age
 """
 class EMOTIC(Dataset):
     """
@@ -28,12 +30,12 @@ class EMOTIC(Dataset):
             root (string): Root directory where images are downloaded to or better to the extracted cvpr_emotic folder.
                             folder data structure should be:
                                 data (root)
-                                    |-cvpr_emotic
+                                    |-cvpr_emotic (images)
                                     |   |-ade20k
                                     |   |-emodb_small
                                     |   |-mscoco
-                                    |-CVPR17_Annotations.mat
-            split (string or list): possible options {'train', 'val', 'test', 'all'}, if list of multiple splits they will be treated as unique split
+                                    |-CVPR17_Annotations.mat (annotations)
+            split (string or list): possible options: 'train', 'val', 'test', if list of multiple splits they will be treated as unique split
             target_type (string or list, optional): Type of target to use, ``bbox``, ``emotions``, ``vad``,
                 ``gender``, ``age``. Can also be a list to output a tuple with all specified target types.
                 The targets represent:
@@ -51,7 +53,30 @@ class EMOTIC(Dataset):
     emotion_categories_map = {
         "Affection": 0,
         "Anger": 1,
-        "Annoyance": 2
+        "Annoyance": 2,
+        "Anticipation": 3,
+        "Aversion": 4,
+        "Confidence": 5,
+        "Disapproval": 6,
+        "Disconnection": 7,
+        "Disquietment": 8,
+        "Doubt/Confuzion": 9,
+        "Embarrassment": 10,
+        "Engagement": 11,
+        "Esteem": 12,
+        "Excitement": 13,
+        "Fatigue": 14,
+        "Fear": 15,
+        "Happiness": 16,
+        "Pain": 17,
+        "Peace": 18,
+        "Pleasure": 19,
+        "Sadness": 20,
+        "Sensitivity": 21,
+        "Suffering": 22,
+        "Surprise": 23,
+        "Sympathy": 24, 
+        "Yearning": 25,
     }
 
     def __init__(self, root: str, split: Union[List[str], str] = "train", target_type: Union[List[str], str] = None, transform: Optional[Callable] = None):
@@ -60,27 +85,26 @@ class EMOTIC(Dataset):
 
         if isinstance(split, list):
             assert len(split) <=3, "You can specify maximum train, val and test splits together"
-            if 'all' in split:
-                assert len(split) == 1, "You must use only all if you want all the dataset"
             self.split = split
         else:
-            if split == 'all':
-                self.split = self.split_all
-            else:
-                self.split = [split]
+            self.split = [split]
         
         self.target_type = target_type
         self.transform = transform
 
         # read annotation file in order to create targets and retrieve images location
-        self.annotations = self._read_annotations()
+        self.metadata, self.targets, self.longest_target = self._read_metadata() 
+        self.classes = list(self.emotion_categories_map.keys())
 
-    def _read_annotations(self):
+
+    def _read_metadata(self):
         # annotation file is in .mat format. A structured file 
         annotations_file = scipy.io.loadmat(os.path.join(self.root, 'CVPR17_Annotations.mat'))
 
         annotations = list(dict())
+        targets_all = []
 
+        longest_target = 0
         for s in self.split:
             split_annotations = annotations_file[s][0]
             for i in range(len(split_annotations)):
@@ -88,15 +112,27 @@ class EMOTIC(Dataset):
                 annotation['split'] = s
                 annotation['img_name'] = split_annotations[i][0][0]
                 annotation['img_folder'] = split_annotations[i][1][0]
+
+                # in past grayscale images were skipped, now they are used, just converted into RGB
+                # img = Image.open(os.path.join(self.root, 'cvpr_emotic', annotation['img_folder'], annotation['img_name']))
+                # if img.mode == "1" or img.mode == "L" or img.mode == "P": # if gray-scale image skip it
+                #     continue
+
                 annotation['img_width'] = split_annotations[i][2][0][0][1][0][0]
                 annotation['img_height'] = split_annotations[i][2][0][0][0][0][0]
                 # annotation['img_original_dataset']=target_annotations[i][3][0][0][0][0]   # ignored
                 # list of target because there could be more than one person
                 targets = []
+                skip = False
                 for p in range(len(split_annotations[i][4][0])):
+
+                    if (p+1) > longest_target:    # find the maximum number of people between all images
+                        longest_target = p+1
+                    
                     target = {}
                     
                     target['bbox'] = split_annotations[i][4][0][p][0][0]
+
                     if s == 'test' or s == 'val': # test annotations are made from several annotators, so the structure is different
                         # combined annotations of emotions categories
                         # print(split_annotations[i][4][0][p][2])
@@ -104,6 +140,7 @@ class EMOTIC(Dataset):
                         # print(split_annotations[i][1][0])
                         if len(split_annotations[i][4][0][p][2]) == 0:  # in test this image /emodb_small/images/12ctuwhai2qxczp2wf.jpg has no emotions annotation
                             target['emotions'] = []
+                            skip = True
                         else:
                             target['emotions'] = split_annotations[i][4][0][p][2][0]
                         # combined annotations of continuous dimensions
@@ -117,26 +154,37 @@ class EMOTIC(Dataset):
                         target['age'] = split_annotations[i][4][0][p][4][0]
                     
                     targets.append(target)
-                annotation['targets'] = targets
-                annotations.append(annotation)
+                annotation['target'] = targets
+                if skip == False:
+                    targets_all.append(targets)
+                    annotations.append(annotation)
 
-        return annotations
+        # print(longest_target)
+        return annotations, targets_all, longest_target
         
     def __len__(self):
-        return len(self.annotations)
+        return len(self.metadata)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img = Image.open(os.path.join(self.root, 'cvpr_emotic', self.annotations[idx]['img_folder'], self.annotations[idx]['img_name']))
-
-        target = self.annotations[idx]['targets']
-        # print(target)
+        img = Image.open(os.path.join(self.root, 'cvpr_emotic', self.metadata[idx]['img_folder'], self.metadata[idx]['img_name']))
+        
+        if img.mode == "1" or img.mode == "L" or img.mode == "P": # if gray-scale image convert into RGB
+            img = img.convert('RGB')
+        
+        target = self.targets[idx]
+        # padding target to have all targets of the same dimension
+        # if len(target) < self.longest_target:
+        #     for i in range(self.longest_target - len(target)):
+        #         target.append(-1)
+        
         if self.transform is not None:
             img = self.transform(img)
         
         return img, target
+
 
 
 class EMOTICPair(EMOTIC):
@@ -150,7 +198,7 @@ class EMOTICPair(EMOTIC):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img = Image.open(os.path.join(self.root, 'cvpr_emotic', self.annotations[idx]['img_folder'], self.annotations[idx]['img_name']))
+        img = Image.open(os.path.join(self.root, 'cvpr_emotic', self.metadata[idx]['img_folder'], self.metadata[idx]['img_name']))
 
         if self.transform is not None:
             if isinstance(self.transform, dict):

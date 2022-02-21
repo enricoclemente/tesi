@@ -23,7 +23,7 @@ import numpy as np
 from spice.config import Config
 from spice.data.augment import Augment, Cutout
 from torchvision.datasets import CIFAR10
-from code.SPICE.experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
+from experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
 
 import moco.builder
 from spice.model.feature_modules.resnet_cifar import resnet18_cifar
@@ -34,13 +34,9 @@ from spice.utils.evaluation import calculate_acc, calculate_nmi, calculate_ari
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 
-model_names = sorted(name for name in models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(models.__dict__[name]))
+
 
 parser = argparse.ArgumentParser(description='SPICE training')
-
-
 parser.add_argument("--config_file", default="./configs/stl10/spice_self.py", metavar="FILE",
                     help="path to config file", type=str)
 
@@ -64,7 +60,7 @@ parser.add_argument('--epochs', default=100, type=int, metavar='N',
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 
-# optimizer
+# training hyperparams
 parser.add_argument('--lr', '--learning-rate', default=0.005, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
