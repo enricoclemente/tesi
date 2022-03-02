@@ -21,6 +21,11 @@ import numpy as np
     - continuous dimensions: emotions classified by VAD (Valence, Arousal and Dominance) model, 1 value for each dimension
     - person gender
     - person age
+
+    Statistics:
+        The two most smallest images are: 
+            with the smallest H: mscoco/images/COCO_val2014_000000118638.jpg W= 640 H= 111 
+            with the smallest W: emodb_small/images/6jl8g5davklv3hw4fh.jpg W= 150 H= 150
 """
 class EMOTIC(Dataset):
     """
@@ -154,9 +159,10 @@ class EMOTIC(Dataset):
                         target['age'] = split_annotations[i][4][0][p][4][0]
                     
                     targets.append(target)
-                annotation['target'] = targets
+                annotation['target'] = {'level1': None, 
+                                        'level1_attributes': targets}
                 if skip == False:
-                    targets_all.append(targets)
+                    targets_all.append(annotation['target'])
                     annotations.append(annotation)
 
         # print(longest_target)

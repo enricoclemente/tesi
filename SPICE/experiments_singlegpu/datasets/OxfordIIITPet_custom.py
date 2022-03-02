@@ -18,6 +18,12 @@ import numpy as np
 
     Annotations are made for the pet present in the photo. 
     In this implementation I will ignore Trimap and head bbox annotations.
+
+    Statistics:
+
+        level1: cat, dog
+        level2: {'abyssinian': 198, 'american_bulldog': 200, 'american_pit_bull_terrier': 200, 'basset_hound': 200, 'beagle': 200, 'bengal': 200, 'birman': 200, 'bombay': 184, 'boxer': 199, 'british_shorthair': 200, 'chihuahua': 200, 'egyptian_mau': 190, 'english_cocker_spaniel': 196, 'english_setter': 200, 'german_shorthaired': 200, 'great_pyrenees': 200, 'havanese': 200, 'japanese_chin': 200, 'keeshond': 199, 'leonberger': 200, 'maine_coon': 200, 'miniature_pinscher': 200, 'newfoundland': 196, 'persian': 200, 'pomeranian': 200, 'pug': 200, 'ragdoll': 200, 'russian_blue': 200, 'saint_bernard': 200, 'samoyed': 200, 'scottish_terrier': 199, 'shiba_inu': 200, 'siamese': 199, 'sphynx': 200, 'staffordshire_bull_terrier': 189, 'wheaten_terrier': 200, 'yorkshire_terrier': 200}
+
 """
 class OxfordIIITPet(Dataset):
     """
@@ -31,11 +37,14 @@ class OxfordIIITPet(Dataset):
                                     |-annotations
 
             split (string or list): possible options: 'train', 'test', if list of multiple splits they will be treated as unique split
-            split_perc (float): in order to custom the dataset you can choose the split percentage
+            split_perc (float): in order to customize the dataset you can choose the split percentage
             transform (callable, optional): A function/transform that  takes in an PIL image 
                 and returns a transformed version. E.g, ``transforms.ToTensor``
+            partition (float): use it to take only a part of the dataset, keeping the proportion of number of images per classes
+                split_perc will work as well splitting the partion
     """
-    def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8, transform: Optional[Callable] = None):
+    def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8, 
+                transform: Optional[Callable] = None, partition_perc: float = 1.0):
         self.root = root
 
         if isinstance(split, list):
@@ -47,6 +56,8 @@ class OxfordIIITPet(Dataset):
         self.split_perc = split_perc
 
         self.transform = transform
+
+        self.partition_perc = partition_perc
 
         self.metadata, self.targets, self.classes_map, self.classes_count, self.classes_hierarchy = self._read_metadata()
         self.classes = list(self.classes_map.keys())
@@ -68,7 +79,7 @@ class OxfordIIITPet(Dataset):
         classes_splitter = {}
 
         # in this case there is a two-level hierarchy
-        classes_hierarchy = { "cat": {"id": 0, "sub_classes": []}, "dog": {"id": 1, "sub_classes": []}}
+        classes_hierarchy = { "cat": [], "dog": []}
 
         # first read annotation files in order to get statistics and info about images
         for file_name in ['trainval.txt', 'test.txt']:
@@ -85,14 +96,14 @@ class OxfordIIITPet(Dataset):
                         classes_count[class_name] = 1
                         classes_splitter[class_name] = 0
                         if species == "1":
-                            classes_hierarchy["cat"]["sub_classes"].append(class_name)
+                            classes_hierarchy["cat"].append(class_name)
                         elif species == "2":
-                            classes_hierarchy["dog"]["sub_classes"].append(class_name)
+                            classes_hierarchy["dog"].append(class_name)
                     else:
                         classes_count[class_name] += 1
         
-        # print("classes_map: {} \n classes_count: {} \n classes_hierarchy: {}".format(classes_map, classes_count, classes_hierarchy))
-
+        # print("classes_map: {} \n classes_count: {} \n classes_hierarchy: {}".format(classes_map, classes_count, classes_hierarchy))
+        
         # now creating metadata with images infos
         for file_name in ['trainval.txt', 'test.txt']:
             with open(os.path.join(self.root, "annotations", file_name), 'r') as file:
@@ -106,7 +117,7 @@ class OxfordIIITPet(Dataset):
                     species = line[2]
 
                     if "train" in self.split:
-                        if classes_splitter[class_name] < int(classes_count[class_name] * self.split_perc):
+                        if classes_splitter[class_name] < int(classes_count[class_name] * self.split_perc * self.partition_perc):
                             meta['split'] = "train"
                             meta['img_name'] = img_name + ".jpg"
                             meta['img_folder'] = ''
@@ -115,18 +126,18 @@ class OxfordIIITPet(Dataset):
                             
                             targets.append(meta['target'])
                             metadata.append(meta)
-                    
-                    if "test" in self.split:
-                        if classes_splitter[class_name] >= int(classes_count[class_name] * self.split_perc):
-                            meta['split'] = "test"
-                            meta['img_name'] = img_name + ".jpg"
-                            meta['img_folder'] = ''
-                            meta['target'] = { 'level1': list(classes_hierarchy.keys())[int(species) -1], 
-                                                'level2': list(classes_map.keys())[int(class_ID) - 1] }
-                            targets.append(meta['target'])
-                            metadata.append(meta)
-                    classes_splitter[class_name] += 1
-   
+                            classes_splitter[class_name] += 1
+                        elif (classes_splitter[class_name] >= int(classes_count[class_name] * self.split_perc * self.partition_perc) 
+                            and classes_splitter[class_name] < int(classes_count[class_name] * self.partition_perc)):
+                            if "test" in self.split:
+                                    meta['split'] = "test"
+                                    meta['img_name'] = img_name + ".jpg"
+                                    meta['img_folder'] = ''
+                                    meta['target'] = { 'level1': list(classes_hierarchy.keys())[int(species) -1], 
+                                                        'level2': list(classes_map.keys())[int(class_ID) - 1] }
+                                    targets.append(meta['target'])
+                                    metadata.append(meta)
+                                    classes_splitter[class_name] += 1
 
         return metadata, targets, classes_map, classes_count, classes_hierarchy
                 

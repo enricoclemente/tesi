@@ -4,6 +4,8 @@
 /SPICE/experiments_singlegpu/datasets/SUN397
 /SPICE/experiments_singlegpu/datasets/OxfordIII-TPet
 /SPICE/experiments_singlegpu/datasets/Selfie-Image-Detection-Dataset
+/SPICE/experiments_singlegpu/datasets/IIIT-CFW
+/SPICE/experiments_singlegpu/datasets/ArtImages
 __pycache__
 prova.py 
 *.out

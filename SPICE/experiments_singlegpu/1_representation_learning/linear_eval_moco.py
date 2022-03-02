@@ -31,7 +31,7 @@ parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/m
                     help='path to tensorboard logs')
 parser.add_argument('--lr', '--learning-rate', default=0.015, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')                   
-parser.add_argument('--batch_size', type=int, default=512, help='Number of images in each mini-batch')
+parser.add_argument('--batch-size', type=int, default=512, help='Number of images in each mini-batch')
 parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)',
                     dest='weight_decay')
@@ -107,15 +107,17 @@ def main():
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=1, pin_memory=True)
 
     encoder = resnet18_cifar()
+    print(encoder)
 
     if os.path.isfile(args.model_path):
         loc = 'cuda:{}'.format(torch.cuda.current_device())
         checkpoint = torch.load(args.model_path, map_location=loc)
         state_dict = dict()
-        for key in checkpoint:
-            if key.startswith("module.feature_module"):
+        for key in checkpoint['state_dict']:
+            print(key)
+            if key.startswith("encoder_q"):
                 # print(key[22:])
-                state_dict[key[22:]] = checkpoint[key]
+                state_dict[key[10:]] = checkpoint['state_dict'][key]
         
         encoder.load_state_dict(state_dict, strict=False)
     else:
