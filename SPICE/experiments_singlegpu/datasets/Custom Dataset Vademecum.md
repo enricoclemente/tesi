@@ -28,7 +28,7 @@ The structure is:
 For every level0 the deepest sub level is the "last level"
 
 Classes are:
-- people
+- people 
     - selfie
     - nonselfie
 - scenes

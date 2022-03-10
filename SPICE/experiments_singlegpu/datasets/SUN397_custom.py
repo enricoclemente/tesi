@@ -1,4 +1,5 @@
 import os
+import collections
 
 import torch
 from torch.utils.data import Dataset
@@ -46,11 +47,16 @@ class SUN397(Dataset):
                 you choose percentage
             transform (callable, optional): A function/transform that  takes in an PIL image 
                 and returns a transformed version. E.g, ``transforms.ToTensor``
-            partition (float): use it to take only a part of the dataset, keeping the proportion of number of images per classes
-                split_perc will work as well splitting the partion
+            partition (float): use it to take only a part of the dataset, keeping the proportion of number of 
+                images per classes split_perc will work as well splitting the partion
+            aspect_ratio_threshold (float): use it to filter images that have a greater aspect ratio
+            dim_threshold (float): use it to filter images which area is 
+                lower of = dim_threshold * dim_threshold * 1/aspect_ratio_threshold
+            
     """
     def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8, 
-                transform: Optional[Callable] = None, partition_perc: float = 1.0):
+                transform: Optional[Callable] = None, partition_perc: float = 1.0, distribute_images: bool = False, distribute_level: str = 'level3',
+                aspect_ratio_threshold: float = None, dim_threshold: int = None):
 
         self.root = root
 
@@ -65,8 +71,21 @@ class SUN397(Dataset):
         self.transform = transform
 
         self.partition_perc = partition_perc
+        self.distribute_images = distribute_images
 
-        self.metadata, self.targets, self.classes_map, self.classes_count, self.classes_hierarchy = self._read_metadata()
+        self.distribute_level = distribute_level
+
+        if aspect_ratio_threshold is not None:
+            self.aspect_ratio_threshold = aspect_ratio_threshold
+        else:
+            self.aspect_ratio_threshold = None
+
+        if dim_threshold is not None:
+            self.area_threshold = dim_threshold * dim_threshold * 1/aspect_ratio_threshold
+        else: 
+            self.area_threshold = None
+
+        self.metadata, self.targets, self.classes_map, self.classes_count, self.classes_hierarchy, self.filtering_classes_effect, self.total_filtered = self._read_metadata()
         self.classes = list(self.classes_map.keys())
 
 
@@ -79,23 +98,74 @@ class SUN397(Dataset):
         metadata = []
         targets_all = []
 
+        total_images = 0
         # create map of classes { classname: index }
-        classes_map = {}
+        classes_map = {'level1': {"indoor": 0, "outdoor_natural": 1, "outdoor_man-made": 2},
+                        'level2': {"shopping_and_dining": 0, "workplace": 1, "home_or_hotel": 2,
+                                    "transportation": 3, "sports_and_leisure": 4, "cultural": 5,
+                                    "water_ice_snow": 6, "mountains_hills_desert_sky": 7,
+                                    "forest_field_jungle": 8, "man-made_elements": 9,
+                                    "transportation": 10, "cultural_or_historical_building_place": 11,
+                                    "sportsfields_parks_leisure_spaces": 12, "industrial_and_construction": 13,
+                                    "houses_cabins_gardens_and_farms": 14, "commercial_buildings": 15},
+                        'level3': {}}
         # create map of classes with number of images per classes { classname: # of images in class }
-        classes_count = {}
+        classes_count = {'level1': {"indoor": 0, "outdoor_natural": 0, "outdoor_man-made": 0},
+                        'level2': {"shopping_and_dining": 0, "workplace": 0, "home_or_hotel": 0,
+                                    "transportation": 0, "sports_and_leisure": 0, "cultural": 0,
+                                    "water_ice_snow": 0, "mountains_hills_desert_sky": 0,
+                                    "forest_field_jungle": 0, "man-made_elements": 0,
+                                    "transportation": 0, "cultural_or_historical_building_place": 0,
+                                    "sportsfields_parks_leisure_spaces": 0, "industrial_and_construction": 0,
+                                    "houses_cabins_gardens_and_farms": 0, "commercial_buildings": 0},
+                        'level3': {}}
         # will be used to distribute in the same proportion each class into train and test
-        classes_splitter = {}
+        classes_splitter = {'level1': {"indoor": 0, "outdoor_natural": 0, "outdoor_man-made": 0},
+                            'level2': {"shopping_and_dining": 0, "workplace": 0, "home_or_hotel": 0,
+                                        "transportation": 0, "sports_and_leisure": 0, "cultural": 0,
+                                        "water_ice_snow": 0, "mountains_hills_desert_sky": 0,
+                                        "forest_field_jungle": 0, "man-made_elements": 0,
+                                        "transportation": 0, "cultural_or_historical_building_place": 0,
+                                        "sportsfields_parks_leisure_spaces": 0, "industrial_and_construction": 0,
+                                        "houses_cabins_gardens_and_farms": 0, "commercial_buildings": 0},
+                            'level3': {}}
 
+        # structures for tracking filtered images due to thresholds
+        filtered_classes_count = {'level1': {"indoor": 0, "outdoor_natural": 0, "outdoor_man-made": 0},
+                                'level2': {"shopping_and_dining": 0, "workplace": 0, "home_or_hotel": 0,
+                                            "transportation": 0, "sports_and_leisure": 0, "cultural": 0,
+                                            "water_ice_snow": 0, "mountains_hills_desert_sky": 0,
+                                            "forest_field_jungle": 0, "man-made_elements": 0,
+                                            "transportation": 0, "cultural_or_historical_building_place": 0,
+                                            "sportsfields_parks_leisure_spaces": 0, "industrial_and_construction": 0,
+                                            "houses_cabins_gardens_and_farms": 0, "commercial_buildings": 0},
+                                'level3': {}}
+        total_filtered = 0
+
+        # will be used to distribute equally images among classes
+        distributed_classes_count = {'level1': {"indoor": 0, "outdoor_natural": 0, "outdoor_man-made": 0},
+                                'level2': {"shopping_and_dining": 0, "workplace": 0, "home_or_hotel": 0,
+                                            "transportation": 0, "sports_and_leisure": 0, "cultural": 0,
+                                            "water_ice_snow": 0, "mountains_hills_desert_sky": 0,
+                                            "forest_field_jungle": 0, "man-made_elements": 0,
+                                            "transportation": 0, "cultural_or_historical_building_place": 0,
+                                            "sportsfields_parks_leisure_spaces": 0, "industrial_and_construction": 0,
+                                            "houses_cabins_gardens_and_farms": 0, "commercial_buildings": 0},
+                                'level3': {}}
+
+        # read level3 classes name and map them
         with open(os.path.join(self.root,"sun397/partitions/ClassName.txt"), 'r') as file:
             class_index = 0
             for line in file:
                 line = line.strip('\n')
-                classes_map[line] = class_index
-                classes_count[line] = 0
-                classes_splitter[line] = 0
+                classes_map['level3'][line] = class_index
+                classes_count['level3'][line] = 0
+                classes_splitter['level3'][line] = 0
+                filtered_classes_count['level3'][line] = 0
+                distributed_classes_count['level3'][line] = 0
                 class_index += 1
         
-
+        # creating level 1 and level 2 classes hierarchy
         classes_hierarchy = {"indoor": {"shopping_and_dining": [],
                                         "workplace": [],
                                         "home_or_hotel": [],
@@ -111,15 +181,15 @@ class SUN397(Dataset):
                                                 "sportsfields_parks_leisure_spaces": [],
                                                 "industrial_and_construction": [],
                                                 "houses_cabins_gardens_and_farms": [],
-                                                "commercialbuildings_shops_markets_cities_and_towns":[]}}
-        
+                                                "commercial_buildings":[]}}
+        classes_hierarchy_reverse = []
         level1_classes = list(classes_hierarchy.keys())
         level2_classes = list()
         level2_classes.append(list(classes_hierarchy['indoor'].keys()))
         level2_classes.append(list(classes_hierarchy['outdoor_natural'].keys()))
         level2_classes.append(list(classes_hierarchy['outdoor_man-made'].keys()))
 
-        # read hierarchy csv in order to create association between level2 and level3 classes ando so to level1 ones
+        # read hierarchy csv in order to create association between level2 and level3 classes and so to level1 ones
         with open(os.path.join(self.root, 'sun397/partitions/hierarchy_classes.csv'), 'r') as file:
             csv_reader = csv.reader(file, delimiter=';')
             line_count = 0
@@ -128,7 +198,6 @@ class SUN397(Dataset):
                     # ignore columns
                     line_count += 1
                 else:
-                    
                     level1_index = row.index("1", 1, 4) - 1
                     level2_index = 0
                     if level1_index == 0:
@@ -138,39 +207,112 @@ class SUN397(Dataset):
                     elif level1_index == 2:
                         level2_index = row.index("1", 14, 20) - 14
                     classes_hierarchy[level1_classes[level1_index]][level2_classes[level1_index][level2_index]].append(row[0])
+                    classes_hierarchy_reverse.append(list([row[0], level2_classes[level1_index][level2_index], level1_classes[level1_index]]))
                     line_count += 1
             # print('Processed {} lines.'.format(line_count))
             # print(classes_hierarchy)
-
-        for class_name in classes_map.keys():
-            for img in os.listdir(os.path.join(self.root, 'sun397/SUN397', class_name[1:])):
-                classes_count[class_name] += 1
+        
+        # calculating classes statistics
+        for l3_class_name in classes_map['level3'].keys():
             
-            for img in os.listdir(os.path.join(self.root, 'sun397/SUN397', class_name[1:])):
-                meta = {}
-                if "train" in self.split:
-                    if classes_splitter[class_name] < int(classes_count[class_name] * self.split_perc * self.partition_perc):
-                        meta['split'] = "train"
-                        meta['img_name'] = img
-                        meta['img_folder'] = os.path.join('sun397/SUN397', class_name[1:])
-                        # put relative class index in targets since img_folder is equal to class name
-                        meta['target'] = {'level1': class_name}
-                        targets_all.append(meta['target'])
-                        metadata.append(meta)
-                        classes_splitter[class_name] += 1
-                    elif (classes_splitter[class_name] >= int(classes_count[class_name] * self.split_perc * self.partition_perc) 
-                            and classes_splitter[class_name] < int(classes_count[class_name] * self.partition_perc)):
-                        if "test" in self.split:
-                            meta['split'] = "test"
+            for img in os.listdir(os.path.join(self.root, 'sun397/SUN397', l3_class_name[1:])):
+                total_images += 1
+                classes_count['level3'][l3_class_name] += 1
+                classes_count['level2'][classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][1]] += 1
+                classes_count['level1'][classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][2]] += 1
+                filtered_classes_count['level3'][l3_class_name] += 1
+                filtered_classes_count['level2'][classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][1]] += 1
+                filtered_classes_count['level1'][classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][2]] += 1
+
+                W, H = Image.open(os.path.join(self.root, 'sun397/SUN397', l3_class_name[1:], img)).size
+
+                if self.aspect_ratio_threshold is not None and (W/H > self.aspect_ratio_threshold or W/H < 1/self.aspect_ratio_threshold):
+                    # filtered_classes_count[class_name] -= 1
+                    filtered_classes_count['level3'][l3_class_name] -= 1
+                    filtered_classes_count['level2'][classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][1]] -= 1
+                    filtered_classes_count['level1'][classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][2]] -= 1
+                    total_filtered += 1
+                    total_images -= 1
+                elif self.area_threshold is not None and (W*H < self.area_threshold):
+                    # filtered_classes_count[class_name] -= 1
+                    filtered_classes_count['level3'][l3_class_name] -= 1
+                    filtered_classes_count['level2'][classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][1]] -= 1
+                    filtered_classes_count['level1'][classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][2]] -= 1
+                    total_filtered += 1
+                    total_images -= 1
+
+        total_images = int(total_images * self.partition_perc)
+
+        # try to distributed images equally among classes
+        if self.distribute_images == True:
+            i = 0
+            while i < total_images:
+                for c in distributed_classes_count[self.distribute_level].keys():
+                    if distributed_classes_count[self.distribute_level][c] < int(filtered_classes_count[self.distribute_level][c]):
+                        distributed_classes_count[self.distribute_level][c] += 1
+                        i += 1
+            filtered_classes_count = distributed_classes_count
+        else:
+            for c in filtered_classes_count[self.distribute_level].keys():
+                filtered_classes_count[self.distribute_level][c] = filtered_classes_count[self.distribute_level][c] * self.partition_perc
+        
+        for l3_class_name in classes_map['level3'].keys():
+            for img in os.listdir(os.path.join(self.root, 'sun397/SUN397', l3_class_name[1:])):
+                
+                l2_class_name = classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][1]
+                l1_class_name = classes_hierarchy_reverse[classes_map['level3'][l3_class_name]][2]
+                if self.distribute_level == 'level1':
+                    current_class_name = l1_class_name
+                elif self.distribute_level == 'level2':
+                    current_class_name = l2_class_name
+                elif self.distribute_level == 'level3':
+                    current_class_name = l3_class_name
+
+                W, H = Image.open(os.path.join(self.root, 'sun397/SUN397', l3_class_name[1:], img)).size
+                skip = False
+                if self.aspect_ratio_threshold is not None and (W/H > self.aspect_ratio_threshold or W/H < 1/self.aspect_ratio_threshold):
+                    skip = True
+                elif self.area_threshold is not None and (W*H < self.area_threshold):
+                    skip = True
+                if skip == False:
+                    meta = {}
+                    if "train" in self.split:
+                        if classes_splitter[self.distribute_level][current_class_name] < int(filtered_classes_count[self.distribute_level][current_class_name] * self.split_perc):
+                            meta['split'] = "train"
                             meta['img_name'] = img
-                            meta['img_folder'] = os.path.join('sun397/SUN397', class_name[1:])
-                            # put relative class index in targets since img_folder is equal to class name
-                            meta['target'] = {'level1': class_name}
+                            meta['img_folder'] = os.path.join('sun397/SUN397', l3_class_name[1:])
+                            meta['target'] = {'level1': l1_class_name, 'level2': l2_class_name, 'level3': l3_class_name}
                             targets_all.append(meta['target'])
                             metadata.append(meta)
-                            classes_splitter[class_name] += 1
-                
-        return metadata, targets_all, classes_map, classes_splitter, classes_hierarchy
+                            classes_splitter[self.distribute_level][current_class_name] += 1
+                        elif (classes_splitter[self.distribute_level][current_class_name] >= int(filtered_classes_count[self.distribute_level][current_class_name] * self.split_perc) 
+                                and classes_splitter[self.distribute_level][current_class_name] < int(filtered_classes_count[self.distribute_level][current_class_name])):
+                            if "test" in self.split:
+                                meta['split'] = "test"
+                                meta['img_name'] = img
+                                meta['img_folder'] = os.path.join('sun397/SUN397', l3_class_name[1:])
+                                # put relative class index in targets since img_folder is equal to class name
+                                meta['target'] = {'level1': l1_class_name, 'level2': l2_class_name, 'level3': l3_class_name}
+                                targets_all.append(meta['target'])
+                                metadata.append(meta)
+                                classes_splitter[self.distribute_level][current_class_name] += 1
+        
+        # check how much filtering changed classes proportion
+        filtering_classes_effect = {}
+        filtering_classes_effect_sorted = collections.OrderedDict()
+        for key in classes_count[self.distribute_level].keys():
+            if round(filtered_classes_count[self.distribute_level][key]/classes_count[self.distribute_level][key], 2) != 1.0:
+                filtering_classes_effect[key] = round(filtered_classes_count[self.distribute_level][key]/classes_count[self.distribute_level][key], 2)
+
+        for key, value in sorted(filtering_classes_effect.items(), key=lambda item: item[1]):
+            filtering_classes_effect_sorted[key] = value
+        # print(filtered_classes_count)
+        # print(filtering_classes_effect_sorted)
+        # print(total_filtered)
+
+        
+        return (metadata, targets_all, classes_map, classes_splitter, classes_hierarchy, 
+            filtering_classes_effect_sorted, total_filtered)
                 
 
     def __len__(self):

@@ -1,4 +1,5 @@
 import os
+import collections
 
 import torch
 from torch.utils.data import Dataset
@@ -49,9 +50,15 @@ class CFW(Dataset):
             split_perc (float): in order to custom the dataset you can choose the split percentage
             transform (callable, optional): A function/transform that  takes in an PIL image 
                 and returns a transformed version. E.g, ``transforms.ToTensor``
+            partition (float): use it to take only a part of the dataset, keeping the proportion of number of images per classes
+                split_perc will work as well splitting the partion
+            aspect_ratio_threshold (float): use it to filter images that have a greater aspect ratio
+            dim_threshold (float): use it to filter images which area is 
+                lower of = dim_threshold * dim_threshold * 1/aspect_ratio_threshold
     """
-    def __init__(self, root: str, split: Union[List[str], str] = "train", 
-        split_perc: float = 0.8, transform: Optional[Callable] = None):
+    def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8,
+                transform: Optional[Callable] = None, partition_perc: float = 1.0, distribute_images: bool = False,
+                aspect_ratio_threshold: float = None, dim_threshold: int = None):
         self.root = root
 
         if isinstance(split, list):
@@ -64,7 +71,20 @@ class CFW(Dataset):
 
         self.transform = transform
 
-        self.metadata, self.targets, self.classes_map = self._read_metadata()
+        self.partition_perc = partition_perc
+        self.distribute_images = distribute_images
+
+        if aspect_ratio_threshold is not None:
+            self.aspect_ratio_threshold = aspect_ratio_threshold
+        else:
+            self.aspect_ratio_threshold = None
+
+        if dim_threshold is not None:
+            self.area_threshold = dim_threshold * dim_threshold * 1/aspect_ratio_threshold
+        else: 
+            self.area_threshold = None
+
+        self.metadata, self.targets, self.classes_map, self.classes_count, self.filtering_classes_effect, self.total_filtered = self._read_metadata()
         self.classes = list(self.classes_map.keys())
 
 
@@ -75,6 +95,7 @@ class CFW(Dataset):
         metadata = []
         targets = []
 
+        total_images = 0
         # annotation file is in .mat format. A structured file 
         annotations_file = scipy.io.loadmat(os.path.join(self.root, 'IIIT-CFW1.0','IIITCFWdata.mat'))
 
@@ -93,19 +114,58 @@ class CFW(Dataset):
         # will be used to distribute in the same proportion each class into ttrain and test
         classes_splitter = {}
 
+        # structures for tracking filtered images due to thresholds
+        filtered_classes_count = {}
+        total_filtered = 0
+
+        # will be used to distribute equally images among classes
+        distributed_classes_count = {}
+
         classes_index = 0
         # make statistics on the dataset
         for i in range(len(annotations_file['IIITCFWdata'][0][0][1][0])):
             # extract from img_name the classname
+            img_path = annotations_file['IIITCFWdata'][0][0][1][0][i][0]
             class_name = re.split(r'(\d+)', annotations_file['IIITCFWdata'][0][0][1][0][i][0].split('/')[1].split('.')[0])[0].lower()
             if class_name not in classes_map:
                 classes_map[class_name] = classes_index
                 classes_index += 1
                 classes_count[class_name] = 1
                 classes_splitter[class_name] = 0
+                filtered_classes_count[class_name] = 1
+                distributed_classes_count[class_name] = 0
             else:
                 classes_count[class_name] += 1
+                filtered_classes_count[class_name] += 1
+            
+            total_images += 1
 
+            W, H = Image.open(os.path.join(self.root, 'IIIT-CFW1.0', img_path)).size
+
+            if self.aspect_ratio_threshold is not None and (W/H > self.aspect_ratio_threshold or W/H < 1/self.aspect_ratio_threshold):
+                filtered_classes_count[class_name] -= 1
+                total_filtered += 1
+                total_images -= 1
+            elif self.area_threshold is not None and (W*H < self.area_threshold):
+                filtered_classes_count[class_name] -= 1
+                total_filtered += 1
+                total_images -= 1
+
+        total_images = int(total_images * self.partition_perc)
+
+        # try to distributed images equally among classes
+        if self.distribute_images == True:
+            i = 0
+            while i < total_images:
+                for c in distributed_classes_count.keys():
+                    if distributed_classes_count[c] < filtered_classes_count[c]:
+                        distributed_classes_count[c] += 1
+                        i += 1
+            filtered_classes_count = distributed_classes_count
+        else:
+            for c in filtered_classes_count.keys():
+                filtered_classes_count[c] = filtered_classes_count[c] * self.partition_perc
+        
         # print(classes_map)
         # print(classes_count)
         # print(classes_splitter) 
@@ -117,41 +177,63 @@ class CFW(Dataset):
             glass = annotations_file['IIITCFWdata'][0][0][4][0][i][0]
             beard = annotations_file['IIITCFWdata'][0][0][5][0][i][0]
 
-            meta = {}
-            if 'train' in self.split:
-                if classes_splitter[class_name] < int(classes_count[class_name] * self.split_perc):
-                    meta['split'] = 'train'
-                    meta['img_name'] = img_path.split('/')[1]
-                    meta['img_folder'] = img_path.split('/')[0]
-                    meta['target'] = { 'level1': class_name ,
-                                        'level1_attributes': { 'gender': gender,
-                                                                'age': age,
-                                                                'glass': glass,
-                                                                'beard': beard}
-                                    }
-                    targets.append(meta['target'])
-                    metadata.append(meta)
-
-            if 'test' in self.split:
-                if classes_splitter[class_name] >= int(classes_count[class_name] * self.split_perc):
-                    meta['split'] = 'test'
-                    meta['img_name'] = img_path.split('/')[1]
-                    meta['img_folder'] = img_path.split('/')[0]
-                    meta['target'] = { 'level1': class_name ,
-                                        'level1_attributes': { 'gender': gender,
-                                                                'age': age,
-                                                                'glass': glass,
-                                                                'beard': beard}
-                                    }
-                    targets.append(meta['target'])
-                    metadata.append(meta)
+            W, H = Image.open(os.path.join(self.root, 'IIIT-CFW1.0', img_path)).size
             
-            classes_splitter[class_name] += 1
+            skip = False
+            if self.aspect_ratio_threshold is not None and (W/H > self.aspect_ratio_threshold or W/H < 1/self.aspect_ratio_threshold):
+                skip = True
+            elif self.area_threshold is not None and (W*H < self.area_threshold):
+                skip = True
+            if skip == False:
+                meta = {}
+                if 'train' in self.split:
+                    if classes_splitter[class_name] < int(filtered_classes_count[class_name] * self.split_perc):
+                        meta['split'] = 'train'
+                        meta['img_name'] = img_path.split('/')[1]
+                        meta['img_folder'] = os.path.join('IIIT-CFW1.0', img_path.split('/')[0])
+                        meta['target'] = { 'level1': 'cartoon',
+                                            'level1_attributes': { 'gender': gender,
+                                                                    'age': age,
+                                                                    'glass': glass,
+                                                                    'beard': beard},
+                                            'level2': class_name,
+                                            'level3': class_name,
+                                        }
+                        targets.append(meta['target'])
+                        metadata.append(meta)
+                        classes_splitter[class_name] += 1
+                    elif (classes_splitter[class_name] >= int(filtered_classes_count[class_name] * self.split_perc) 
+                        and classes_splitter[class_name] < int(filtered_classes_count[class_name])):
+                        if "test" in self.split:
+                            meta['split'] = 'test'
+                            meta['img_name'] = img_path.split('/')[1]
+                            meta['img_folder'] = os.path.join('IIIT-CFW1.0', img_path.split('/')[0])
+                            meta['target'] = { 'level1': 'cartoon',
+                                                'level1_attributes': { 'gender': gender,
+                                                                        'age': age,
+                                                                        'glass': glass,
+                                                                        'beard': beard},
+                                                'level2': class_name,
+                                                'level3': class_name,
+                                            }
+                            targets.append(meta['target'])
+                            metadata.append(meta)
+                            classes_splitter[class_name] += 1
 
-        # print(classes_splitter)
-        # check that all images have been picked up
-        # print(classes_count == classes_splitter)
-        return metadata, targets, classes_map
+        # check how much filtering changed classes proportion
+        filtering_classes_effect = {}
+        filtering_classes_effect_sorted = collections.OrderedDict()
+        for key in classes_count.keys():
+            if round(filtered_classes_count[key]/classes_count[key], 2) != 1.0:
+                filtering_classes_effect[key] = round(filtered_classes_count[key]/classes_count[key], 2)
+
+        for key, value in sorted(filtering_classes_effect.items(), key=lambda item: item[1]):
+            filtering_classes_effect_sorted[key] = value
+        # print(filtered_classes_count)
+        # print(filtering_classes_effect_sorted)
+
+        return (metadata, targets, classes_map, classes_splitter, 
+            filtering_classes_effect_sorted, total_filtered)
 
     def __len__(self):
         return len(self.metadata)       
@@ -161,7 +243,7 @@ class CFW(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        img = Image.open(os.path.join(self.root, 'IIIT-CFW1.0', self.metadata[idx]['img_folder'], self.metadata[idx]['img_name']))
+        img = Image.open(os.path.join(self.root, self.metadata[idx]['img_folder'], self.metadata[idx]['img_name']))
 
         if img.mode == "1" or img.mode == "L" or img.mode == "P" or img.mode == "RGBA": 
             # if gray-scale image convert into rgb

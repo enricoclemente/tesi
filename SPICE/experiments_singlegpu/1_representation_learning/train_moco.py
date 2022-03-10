@@ -30,7 +30,7 @@ import moco.loader
 import moco.builder
 
 import torchvision.transforms as transforms
-from experiments_singlegpu.datasets.custom_transforms import PadToSquare
+from experiments_singlegpu.datasets.utils.custom_transforms import PadToSquare
 from torchvision.datasets import CIFAR10
 from experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
 from experiments_singlegpu.datasets.EMOTIC_custom import EMOTIC, EMOTICPair

@@ -6,6 +6,7 @@
 /SPICE/experiments_singlegpu/datasets/Selfie-Image-Detection-Dataset
 /SPICE/experiments_singlegpu/datasets/IIIT-CFW
 /SPICE/experiments_singlegpu/datasets/ArtImages
+/SPICE/experiments_singlegpu/datasets/iCartoonFace
 __pycache__
 prova.py 
 *.out
