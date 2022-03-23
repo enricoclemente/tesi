@@ -1,0 +1,99 @@
+The dataset has 17870 images
+Classes have the following images distribution: 
+ {'nonselfie': 17870}
+Classes have been splitted as follows: 
+ {'nonselfie': {'train': 14296, 'test': 3574}}
+Min height is 111, max height is 5616. With height threshold of 225
+Min width is 150, max width is 7360. With width threshold of 225
+The two most smallest images are: 
+ with the smallest H: cvpr_emotic/mscoco/images/COCO_val2014_000000118638.jpg W= 640 H= 111 
+ with the smallest W: cvpr_emotic/emodb_small/images/6jl8g5davklv3hw4fh.jpg W= 150 H= 150
+Min area is 18816, max area is 36152320. With area threshold of 225x96=21727 there will be filtered 1 images
+Min aspect ratio is 0.4543610547667343, max aspect ratio is 5.7657657657657655. With aspect ratio threshold of 2.33 and his reciprocal 0.43 there will be filtered 58 images
+Image #0 is a nonselfie from split: train file path: cvpr_emotic/emodb_small/images/007eear5kx5qhbzewz.jpg
+[0]/[70] batch iteration
+Image #256 is a nonselfie from split: train file path: cvpr_emotic/emodb_small/images/5v0od5ks7k8u6y4jpj.jpg
+[1]/[70] batch iteration
+[2]/[70] batch iteration
+[3]/[70] batch iteration
+[4]/[70] batch iteration
+[5]/[70] batch iteration
+[6]/[70] batch iteration
+Image #1792 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_train2014_000000087465.jpg
+[7]/[70] batch iteration
+Image #2048 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_train2014_000000104067.jpg
+[8]/[70] batch iteration
+[9]/[70] batch iteration
+[10]/[70] batch iteration
+[11]/[70] batch iteration
+Image #3072 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_train2014_000000167870.jpg
+[12]/[70] batch iteration
+[13]/[70] batch iteration
+[14]/[70] batch iteration
+[15]/[70] batch iteration
+Image #4096 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_train2014_000000236661.jpg
+[16]/[70] batch iteration
+[17]/[70] batch iteration
+Image #4608 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_train2014_000000268901.jpg
+[18]/[70] batch iteration
+[19]/[70] batch iteration
+[20]/[70] batch iteration
+[21]/[70] batch iteration
+[22]/[70] batch iteration
+[23]/[70] batch iteration
+[24]/[70] batch iteration
+[25]/[70] batch iteration
+Image #6656 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_train2014_000000394766.jpg
+[26]/[70] batch iteration
+[27]/[70] batch iteration
+[28]/[70] batch iteration
+[29]/[70] batch iteration
+[30]/[70] batch iteration
+[31]/[70] batch iteration
+[32]/[70] batch iteration
+Image #8448 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_train2014_000000506631.jpg
+[33]/[70] batch iteration
+[34]/[70] batch iteration
+[35]/[70] batch iteration
+[36]/[70] batch iteration
+[37]/[70] batch iteration
+Image #9728 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_val2014_000000025997.jpg
+[38]/[70] batch iteration
+[39]/[70] batch iteration
+[40]/[70] batch iteration
+[41]/[70] batch iteration
+[42]/[70] batch iteration
+Image #11008 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_val2014_000000209917.jpg
+[43]/[70] batch iteration
+[44]/[70] batch iteration
+[45]/[70] batch iteration
+[46]/[70] batch iteration
+[47]/[70] batch iteration
+[48]/[70] batch iteration
+Image #12544 is a nonselfie from split: train file path: cvpr_emotic/emodb_small/images/g417hk78zy2bj09kk9.jpg
+[49]/[70] batch iteration
+[50]/[70] batch iteration
+[51]/[70] batch iteration
+[52]/[70] batch iteration
+Image #13568 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_train2014_000000469587.jpg
+[53]/[70] batch iteration
+[54]/[70] batch iteration
+Image #14080 is a nonselfie from split: train file path: cvpr_emotic/mscoco/images/COCO_val2014_000000475658.jpg
+[55]/[70] batch iteration
+[56]/[70] batch iteration
+Image #14592 is a nonselfie from split: test file path: cvpr_emotic/mscoco/images/COCO_train2014_000000018093.jpg
+[57]/[70] batch iteration
+[58]/[70] batch iteration
+[59]/[70] batch iteration
+[60]/[70] batch iteration
+[61]/[70] batch iteration
+[62]/[70] batch iteration
+[63]/[70] batch iteration
+[64]/[70] batch iteration
+[65]/[70] batch iteration
+Image #16896 is a nonselfie from split: test file path: cvpr_emotic/mscoco/images/COCO_val2014_000000032965.jpg
+[66]/[70] batch iteration
+Image #17152 is a nonselfie from split: test file path: cvpr_emotic/mscoco/images/COCO_val2014_000000148570.jpg
+[67]/[70] batch iteration
+[68]/[70] batch iteration
+[69]/[70] batch iteration

@@ -33,7 +33,7 @@ def calculate_acc(ypred, y, return_idx=False):
     # convert the C matrix to the 'true' cost
     Cmax = np.amax(C)
     C = Cmax - C
-    #
+    
     # indices = linear_sum_assignment(C)
     # row = indices[:][:, 0]
     # col = indices[:][:, 1]

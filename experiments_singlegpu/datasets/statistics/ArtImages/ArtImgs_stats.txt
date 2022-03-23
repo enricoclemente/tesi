@@ -1,0 +1,12 @@
+/home/guest/anaconda3/envs/spice/lib/python3.9/site-packages/PIL/Image.py:975: UserWarning: Palette images with Transparency expressed in bytes should be converted to RGBA images
+  warnings.warn(
+The daset is has 8577 images
+The classes have been splitted in the following numbers: 
+ {'drawings': {'train': 983, 'test': 246}, 'engraving': {'train': 672, 'test': 169}, 'iconography': {'train': 1846, 'test': 462}, 'painting': {'train': 1816, 'test': 454}, 'sculpture': {'train': 1543, 'test': 386}}
+Min height is 92, max height is 1512. With height threshold of 225
+Min width is 37, max width is 2016. With width threshold of 225
+The two most smallest images are: 
+ with the smallest H: dataset/dataset_updated/training_set/painting/1884.jpg W= 290 H= 92 
+ with the smallest W: dataset/dataset_updated/training_set/sculpture/i - 485.jpeg W= 37 H= 320
+Min area is 11840, max area is 3048192. With area threshold of 225x96=21727 there will be filtered 3 images
+Min aspect ratio is 0.115625, max aspect ratio is 4.0. With aspect ratio threshold of 2.33 and his reciprocal 0.43 there will be filtered 62 images
