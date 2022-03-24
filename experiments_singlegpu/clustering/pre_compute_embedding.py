@@ -16,9 +16,9 @@ from torchvision.datasets import CIFAR10
 import torchvision.transforms as transforms
 import numpy as np
 
-from spice.model.feature_modules.resnet_cifar import resnet18_cifar
-import moco.builder
-import moco.loader
+from SPICE.spice.model.feature_modules.resnet_cifar import resnet18_cifar
+import SPICE.moco.builder
+import SPICE.moco.loader
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -89,7 +89,7 @@ def main():
     #                     transform=transforms.Compose([transforms.ToTensor(),CIFAR10_normalization]), download=True)
     # test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=16, pin_memory=True)
 
-    moco_model = moco.builder.MoCo(
+    moco_model = SPICE.moco.builder.MoCo(
         base_encoder=resnet18_cifar,
         dim=args.moco_dim, K=args.moco_k, m=args.moco_m, T=args.moco_t, mlp=args.mlp, input_size=32, single_gpu=True)
 

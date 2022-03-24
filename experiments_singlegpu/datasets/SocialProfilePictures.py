@@ -85,6 +85,7 @@ class SocialProfilePictures(Dataset):
         # mapping only target levels, other level info will be added in metadata
         classes_map = {}
         classes_count = {}
+        classes_split_count = {}
 
         classes_splitter = {}
 
@@ -104,6 +105,7 @@ class SocialProfilePictures(Dataset):
                         class_index += 1
                         classes_count[row[8]] = 1
                         classes_splitter[row[8]] = 0
+                        classes_split_count[row[8]] = 0
                     else: 
                         classes_count[row[8]] += 1
                     line_count += 1
@@ -128,10 +130,10 @@ class SocialProfilePictures(Dataset):
                         if classes_splitter[row[8]] < int(classes_count[row[8]] * self.split_perc):
                             meta['split'] = 'train'
                             take_img = True
-                    if "validation" in self.split:
+                    if "val" in self.split:
                         if (classes_splitter[row[8]] >= int(classes_count[row[8]] * self.split_perc) and 
                             classes_splitter[row[8]] < int(classes_count[row[8]] * self.split_perc + classes_count[row[8]] * (1.0 - self.split_perc)/2)):
-                            meta['split'] = 'validation'
+                            meta['split'] = 'val'
                             take_img = True
                     if "test" in self.split:
                         if (classes_splitter[row[8]] >= int(classes_count[row[8]] * self.split_perc + classes_count[row[8]] * (1.0 - self.split_perc)/2)):
@@ -143,10 +145,11 @@ class SocialProfilePictures(Dataset):
                         meta['target'] = {'level1': row[5], 'level2': row[6], 'level3': row[7], 'target_level': row[8]}
                         targets.append(classes_map[row[8]])
                         metadata.append(meta)
+                        classes_split_count[row[8]] += 1
                     
                     classes_splitter[row[8]] += 1
 
-        return metadata, targets, classes_map, classes_count
+        return metadata, targets, classes_map, classes_split_count
 
 
     def __len__(self):

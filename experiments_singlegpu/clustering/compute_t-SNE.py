@@ -7,9 +7,9 @@ sys.path.insert(0, './')
 
 import random
 import numpy as np
+import torch.nn.functional as F
 import torch
 
-import torchvision
 from torchvision.models.resnet import resnet18
 from experiments_singlegpu.datasets.SocialProfilePictures import SocialProfilePictures
 
@@ -32,7 +32,7 @@ def main():
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    dataset = SocialProfilePictures(root='/scratch/work/Tesi/LucaPiano/spice/code/SPICE/experiments_singlegpu/datasets', split=['train', 'validation', 'test'],
+    dataset = SocialProfilePictures(root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets', split=['train', 'validation', 'test'],
                     transform=transforms.Compose([PadToSquare(), transforms.Resize([225, 225]), transforms.ToTensor()]))
 
     if not (os.path.isfile("{}/features.npy".format(args.save_folder)) 
@@ -41,6 +41,9 @@ def main():
         model = resnet18(pretrained=True)
         # removing fc layer
         model = torch.nn.Sequential(*(list(model.children())[:-1]))
+        for p in model.parameters():
+            p.requires_grad = False
+            
         print(model)
         model.cuda()
 
@@ -60,6 +63,7 @@ def main():
 
                 feature = model.forward(img)
                 feature = torch.flatten(feature, 1)
+                feature = F.normalize(feature, dim=1)
 
                 # collecting all features and targets
                 features.append(feature.cpu())

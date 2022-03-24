@@ -10,3 +10,5 @@ experiments_singlegpu/datasets/iCartoonFace
 __pycache__
 prova.py 
 *.out
+features.npy
+targets.npy

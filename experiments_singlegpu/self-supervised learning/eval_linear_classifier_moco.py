@@ -15,12 +15,12 @@ import torchvision.transforms as transforms
 from tqdm import tqdm
 
 
-from spice.model.feature_modules.resnet_cifar import resnet18_cifar
-import moco.builder
-import moco.loader
+from SPICE.spice.model.feature_modules.resnet_cifar import resnet18_cifar
+import SPICE.moco.builder
+import SPICE.moco.loader
 from torch.utils.tensorboard import SummaryWriter
 
-parser = argparse.ArgumentParser(description='Linear Evaluation for MoCo')
+parser = argparse.ArgumentParser(description='Evaluation for MoCo with Linear Classifier')
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
 parser.add_argument('--model_path', type=str, default='results/128_0.5_200_512_500_model.pth',

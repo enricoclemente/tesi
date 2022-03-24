@@ -18,21 +18,21 @@ import torch.optim
 import torch.utils.data
 
 
-from spice.config import Config
+from SPICE.spice.config import Config
 from torch.utils.tensorboard import SummaryWriter
 
 import torchvision.models as models
-from spice.model.feature_modules.resnet_cifar import resnet18_cifar
+from SPICE.spice.model.feature_modules.resnet_cifar import resnet18_cifar
 
 
-import moco.loader
-import moco.builder
+import SPICE.moco.builder
 
 import torchvision.transforms as transforms
 from experiments_singlegpu.datasets.utils.custom_transforms import PadToSquare
 from torchvision.datasets import CIFAR10
 from experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
 from experiments_singlegpu.datasets.EMOTIC_custom import EMOTIC, EMOTICPair
+from experiments_singlegpu.datasets.SocialProfilePictures import SocialProfilePictures
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -126,7 +126,7 @@ def main():
             transforms.ColorJitter(0.8, 0.8, 0.8, 0.2)  # not strengthened
         ], p=0.8),
         transforms.RandomGrayscale(p=0.2),
-        transforms.RandomApply([moco.loader.GaussianBlur([.1, 2.])], p=0.5),
+        transforms.RandomApply([SPICE.moco.loader.GaussianBlur([.1, 2.])], p=0.5),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         dataset_normalization
@@ -165,7 +165,7 @@ def main():
                             transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size])]
         # creating EMOTIC train and test dataset from custom EMOTICPair class 
         # which gave pair augmentation of image
-        train_dataset = EMOTICPair(root=args.dataset_folder, split=["train", "val"], 
+        train_dataset = SocialProfilePictures(root=args.dataset_folder, split=["train"], 
                                     transform=transforms.Compose(
                                                 resize_transform +
                                                 mocov2_augmentation))
@@ -218,7 +218,7 @@ def main():
 
 
     # creating model MoCo 
-    model = moco.builder.MoCo(
+    model = SPICE.moco.builder.MoCo(
         base_encoder=base_encoder,
         dim=cfg.moco.moco_dim, K=cfg.moco.moco_k, m=cfg.moco.moco_m, T=cfg.moco.moco_t, mlp=cfg.moco.mlp)
     print(model)

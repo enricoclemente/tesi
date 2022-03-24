@@ -14,7 +14,7 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 
 from torch.utils.tensorboard import SummaryWriter
-from spice.model.feature_modules.resnet_cifar import resnet18_cifar
+from SPICE.spice.model.feature_modules.resnet_cifar import resnet18_cifar
 from torchvision.models import resnet18
 
 from torchvision.datasets import CIFAR10
