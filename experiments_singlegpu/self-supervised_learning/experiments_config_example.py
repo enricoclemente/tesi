@@ -3,12 +3,12 @@
 """
 dataset = dict(
     img_size = 224,
-    normalization = dict(mean=[0.4914, 0.4822, 0.4465], std=[0.2023, 0.1994, 0.2010])
+    normalization = dict(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # ImageNet values
 )
 
 moco = dict(
     moco_dim=128,
-    moco_k=65536,
+    moco_k=4096,
     moco_m=0.999,
     moco_t=0.2,
     mlp=True,

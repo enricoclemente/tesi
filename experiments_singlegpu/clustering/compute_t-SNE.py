@@ -33,7 +33,7 @@ def main():
     np.random.seed(seed)
 
     dataset = SocialProfilePictures(root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets', split=['train', 'validation', 'test'],
-                    transform=transforms.Compose([PadToSquare(), transforms.Resize([225, 225]), transforms.ToTensor()]))
+                    transform=transforms.Compose([PadToSquare(), transforms.Resize([224, 224]), transforms.ToTensor()]))
 
     if not (os.path.isfile("{}/features.npy".format(args.save_folder)) 
             and os.path.isfile("{}/targets.npy".format(args.save_folder))):

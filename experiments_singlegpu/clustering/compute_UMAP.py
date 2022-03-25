@@ -43,7 +43,7 @@ def main():
         os.makedirs(args.save_folder)
     
     dataset = SocialProfilePictures(root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets', split=['train','val','test'],
-                    transform=transforms.Compose([PadToSquare(), transforms.Resize([225, 225]), transforms.ToTensor()]))
+                    transform=transforms.Compose([PadToSquare(), transforms.Resize([224, 224]), transforms.ToTensor()]))
 
     if not (os.path.isfile("{}/features.npy".format(args.features_folder)) 
             and os.path.isfile("{}/targets.npy".format(args.features_folder))):

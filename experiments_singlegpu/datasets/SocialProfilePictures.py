@@ -174,8 +174,32 @@ class SocialProfilePictures(Dataset):
 
 
 
+class SocialProfilePicturesPair(SocialProfilePictures):
+    """
+        Extends SocialProfilePictures Dataset 
+        It will return a pair for every image. Is used for self-supervised learning. 
+        If you pass at constructor trasform as {"augmentation_1": ..., "agumentation_2": ..} two different trasnformation will be applied.
+        If you pass a simple transform, the same transformation will be applied to the two augmentations
+    """
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
 
+        img = Image.open(os.path.join(self.root, self.metadata[idx]['img_folder'], self.metadata[idx]['img_name']))
 
+        if img.mode == "1" or img.mode == "L" or img.mode == "P" or img.mode == "RGBA": # if gray-scale image convert into rgb
+            img = img.convert('RGB')
+
+        if self.transform is not None:
+            if isinstance(self.transform, dict):
+                # if augmentations are different
+                augmentation_1 = self.transform['augmentation_1'](img)
+                augmentation_2 = self.transform['augmentation_2'](img)
+            else:
+                augmentation_1 = self.transform(img)
+                augmentation_2 = self.transform(img)
+        
+        return augmentation_1, augmentation_2
 
 
 

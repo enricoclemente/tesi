@@ -24,32 +24,33 @@ from torch.utils.tensorboard import SummaryWriter
 import torchvision.models as models
 from SPICE.spice.model.feature_modules.resnet_cifar import resnet18_cifar
 
-
+import SPICE.moco.loader
 import SPICE.moco.builder
 
 import torchvision.transforms as transforms
 from experiments_singlegpu.datasets.utils.custom_transforms import PadToSquare
 from torchvision.datasets import CIFAR10
 from experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
-from experiments_singlegpu.datasets.EMOTIC_custom import EMOTIC, EMOTICPair
-from experiments_singlegpu.datasets.SocialProfilePictures import SocialProfilePictures
+from experiments_singlegpu.datasets.SocialProfilePictures import SocialProfilePictures, SocialProfilePicturesPair
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 parser = argparse.ArgumentParser(description='PyTorch MoCo Training')
-parser.add_argument("--config_file", default="./exp_configs.py", metavar="FILE",
+parser.add_argument("--config_file", default="./experiments_config_example.py", metavar="FILE",
                     help="path to config file", type=str)
-# arguments for saving and resuming                   
-parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
+# arguments for saving and resuming   
+parser.add_argument('--dataset', default="cifar10", type=str,
+                    help="name of the dataset, this lead to different script choices")                
+parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets',
                     help='path to dataset')
-parser.add_argument('--resume', default='./results/cifar10/moco/checkpoint_last.pth.tar', type=str, metavar='PATH',
+parser.add_argument('--resume', default='./results/chackpoints/checkpoint_last.pth.tar', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
-parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
-                    help='path to results')
-parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/moco/logs',
-                    help='path to tensorboard logs')
+parser.add_argument('--save_folder', metavar='DIR', default='./results/checkpoints/',
+                    help='path to save checkpoints')
+parser.add_argument('--logs_folder', metavar='DIR', default='./results/checkpoints/logs',
+                    help='path to save tensorboard logs')
 
 # running logistics
 parser.add_argument('--save-freq', default=1, type=int, metavar='N',
@@ -65,7 +66,6 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 parser.add_argument('--batch-size', default=128, type=int,
                     metavar='N',
                     help='mini-batch size (default: 128)')
-
 parser.add_argument('--lr', '--learning-rate', default=0.015, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--schedule', default=[120, 160], nargs='*', type=int,
@@ -83,11 +83,6 @@ parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
 # knn monitor
 parser.add_argument('--knn-k', default=200, type=int, help='k in kNN monitor')
 parser.add_argument('--knn-t', default=0.1, type=float, help='softmax temperature in kNN monitor; could be different with moco-t')
-
-# dataset
-parser.add_argument('--dataset', default="cifar10", type=str,
-                    help="name of the dataset, this lead to different script choices")
-
 
 
 def main():
@@ -110,12 +105,11 @@ def main():
 
     torch.cuda.set_device(torch.cuda.current_device())
 
+    # 
     base_encoder = models.resnet18
-    train_dataset = None
-    test_dataset = None
-    knn_test_dataset = None
+    pair_train_dataset = None
+    original_test_dataset = None
     original_train_dataset = None
-    mocov2_augmentation = None
     dataset_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)
     
     # MoCo v2's aug: similar to SimCLR https://arxiv.org/abs/2002.05709
@@ -135,17 +129,14 @@ def main():
         # resnet18_cifar which is an implementation adapted for CIFAR10
         base_encoder = resnet18_cifar
 
-        # creating CIFAR10 train and test dataset from custom CIFAR10Pair class 
+        # creating CIFAR10 train  dataset from custom CIFAR10Pair class 
         # which gave pair augmentation of image
-        train_dataset = CIFAR10Pair(root=args.dataset_folder, train=True, 
-            transform=transforms.Compose(mocov2_augmentation), 
-            download=True)
-        test_dataset = CIFAR10Pair(root=args.dataset_folder, train=False, 
+        pair_train_dataset = CIFAR10Pair(root=args.dataset_folder, train=True, 
             transform=transforms.Compose(mocov2_augmentation), 
             download=True)
 
         # creating CIFAR10 datasets for knn test
-        knn_test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
+        original_test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
             transform=transforms.Compose([transforms.ToTensor(),
                                         dataset_normalization]), 
             download=True)
@@ -156,59 +147,26 @@ def main():
         original_train_loader = torch.utils.data.DataLoader(
             original_train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
             pin_memory=True)
-
-    elif args.dataset == 'emotic':
-        # base resnet18 encoder since using images of the same size of ImageNet
-        base_encoder = models.resnet18
-
-        resize_transform = [PadToSquare(),    # apply padding to make images squared
-                            transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size])]
-        # creating EMOTIC train and test dataset from custom EMOTICPair class 
-        # which gave pair augmentation of image
-        train_dataset = SocialProfilePictures(root=args.dataset_folder, split=["train"], 
-                                    transform=transforms.Compose(
-                                                resize_transform +
-                                                mocov2_augmentation))
-        test_dataset = EMOTICPair(root=args.dataset_folder, split="test", 
-                                    transform=transforms.Compose(
-                                                resize_transform +
-                                                mocov2_augmentation))
-
-        # creating EMOTIC datasets for knn test
-        knn_test_dataset = EMOTIC(root=args.dataset_folder, split="test", 
-                                    transform=transforms.Compose( 
-                                                resize_transform + [
-                                                transforms.ToTensor(),
-                                                dataset_normalization]))
-        original_train_dataset = EMOTIC(root=args.dataset_folder, split=["train", "val"], 
-                                    transform=transforms.Compose(
-                                                resize_transform + [
-                                                transforms.ToTensor(),
-                                                dataset_normalization]))
     elif args.dataset == 'socialprofilepictures':
         # base resnet18 encoder since using images of the same size of ImageNet
         base_encoder = models.resnet18
 
         resize_transform = [PadToSquare(),    # apply padding to make images squared
                             transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size])]
-        # creating EMOTIC train and test dataset from custom EMOTICPair class 
+        # creating SPP train dataset 
         # which gave pair augmentation of image
-        train_dataset = EMOTICPair(root=args.dataset_folder, split=["train", "val"], 
-                                    transform=transforms.Compose(
-                                                resize_transform +
-                                                mocov2_augmentation))
-        test_dataset = EMOTICPair(root=args.dataset_folder, split="test", 
+        pair_train_dataset = SocialProfilePicturesPair(root=args.dataset_folder, split="train", 
                                     transform=transforms.Compose(
                                                 resize_transform +
                                                 mocov2_augmentation))
 
-        # creating EMOTIC datasets for knn test
-        knn_test_dataset = EMOTIC(root=args.dataset_folder, split="test", 
+        # creating SPP datasets for knn test
+        original_test_dataset = SocialProfilePictures(root=args.dataset_folder, split="val", 
                                     transform=transforms.Compose( 
                                                 resize_transform + [
                                                 transforms.ToTensor(),
                                                 dataset_normalization]))
-        original_train_dataset = EMOTIC(root=args.dataset_folder, split=["train", "val"], 
+        original_train_dataset = SocialProfilePictures(root=args.dataset_folder, split="train", 
                                     transform=transforms.Compose(
                                                 resize_transform + [
                                                 transforms.ToTensor(),
@@ -257,16 +215,12 @@ def main():
 
    
     # creating dataset loaders
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
+    pair_train_loader = torch.utils.data.DataLoader(
+        pair_train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True, drop_last=True)
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
-        pin_memory=True)
-
-    # creating CIFAR10 datasets for knn test
-    knn_test_loader = torch.utils.data.DataLoader(
-        knn_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
+    # creating datasets loaders for knn test
+    original_test_loader = torch.utils.data.DataLoader(
+        original_test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
         pin_memory=True)
     original_train_loader = torch.utils.data.DataLoader(
         original_train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
@@ -275,27 +229,26 @@ def main():
 
     # tensorboard plotter
     train_writer = SummaryWriter(args.logs_folder + "/train")
-    test_writer = SummaryWriter(args.logs_folder + "/test")
     knn_test_writer = SummaryWriter(args.logs_folder + "/knn_test")
 
     best_acc = 0.0
     for epoch in range(args.start_epoch, args.epochs):
         
+        # lr scheduling
         new_lr = adjust_learning_rate(optimizer, epoch, args)
         train_writer.add_scalar('Learning rate/lr decay',
                                 new_lr,
                                 epoch)
-        
-        # train for one epoch
-        metrics = train(train_loader, model, criterion, optimizer, epoch, train_writer, args)
 
-        # test seems not the best since it uses the same queue of train samples
-        # test_acc1, test_acc5 = test(test_loader, model, criterion, epoch, test_writer, args)
-        # metrics['test_acc@1'] = test_acc1
-        # metrics['test_acc@5'] = test_acc5
+        print("Training epoch {}".format(epoch))
+        # training
+        metrics = train(pair_train_loader, model, criterion, optimizer, epoch, train_writer, args)
 
+        # knn test
         if args.dataset != "emotic":    # with emotic targets are not simple classes so knn cannot be computed as for other datasets
-            metrics['knn_test_acc@1'] = knn_test(model.encoder_q, original_train_loader, knn_test_loader, epoch, knn_test_writer, args)
+            print("KNN Test epoch {}".format(epoch))
+            metrics['knn_test_acc@1'] = knn_test(model.encoder_q, original_train_loader, original_test_loader, epoch, knn_test_writer, args)
+
 
         if best_acc < metrics['training_acc@1']:
             best_acc = metrics['training_acc@1']
@@ -325,15 +278,6 @@ def main():
                 'optimizer' : optimizer.state_dict(),
                 'metrics' : metrics,
             }, is_best=False, filename='{}/checkpoint_last.pth.tar'.format(args.save_folder))
-
-        if (epoch+1) == args.epochs:
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'arch': 'resnet18',
-                'state_dict': model.state_dict(),
-                'optimizer' : optimizer.state_dict(),
-                'metrics' : metrics,
-            }, is_best=False, filename='{}/checkpoint_final.pth.tar'.format(args.save_folder))
 
 
 def train(train_loader, model, criterion, optimizer, epoch, writer,args):
@@ -415,7 +359,7 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
     writer.add_scalar('Training Accuracy/epoch top5 accuracy',
                 top5.get_avg(),
                 epoch)
-    writer.add_scalar('Training Time/batch time',
+    writer.add_scalar('Training Time/epoch time',
                 batch_time.get_sum(),
                 epoch)        
     metrics = {
@@ -426,52 +370,15 @@ def train(train_loader, model, criterion, optimizer, epoch, writer,args):
     return metrics
 
 
-def test(test_data_loader, model, criterion, epoch, writer, args):
-    losses = AverageMeter('Loss', ':.4e')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
-
-    model.eval()
-    
-    with torch.no_grad():
-        for i, (img1, img2) in enumerate(test_data_loader):
-            img1, img2 = img1.cuda(non_blocking=True), img2.cuda(non_blocking=True)
-
-            output, target = model.forward_singlegpu_eval(im_q=img1, im_k=img2)
-            
-            # calculate accuracy and loss
-            loss = criterion(output, target)
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
-
-            # update meters
-            top1.update(acc1[0])
-            top5.update(acc5[0])
-            losses.update(loss)
-            
-            if i % args.print_freq == 0:
-                print('Test Epoch: [{}][{}/{}] Loss:{} Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), losses.get_avg(), top1.get_avg(), top5.get_avg()))
-    
-    # statistics to be written at the end of every epoch
-    writer.add_scalar('Training Loss/epoch loss',
-                losses.get_avg(),
-                epoch)
-    writer.add_scalar('Training Accuracy/epoch top1 accuracy',
-                top1.get_avg(),
-                epoch)    
-    writer.add_scalar('Training Accuracy/epoch top5 accuracy',
-                top5.get_avg(),
-                epoch)
-    print('Test Epoch: [{}][{}/{}] Acc@1:{:.2f}% Acc@5:{:.2f}%'.format(epoch, i, len(test_data_loader), top1.get_avg(), top5.get_avg()))
-    return top1.get_avg(), top5.get_avg()
-
-
 # test using a knn monitor
 def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
     model.eval()
     classes = len(memory_data_loader.dataset.classes) #get number of classes
     total_top1, total_top5, total_num, feature_bank = 0.0, 0.0, 0, []
+    start = time.time()
     with torch.no_grad():
         # generate feature bank from train dataset
+        print("Collecting features")
         for data, target in memory_data_loader:
             feature = model(data.cuda(non_blocking=True)) # for every sample in the batch let predict features NxC tensor
             feature = F.normalize(feature, dim=1)
@@ -483,6 +390,7 @@ def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
         feature_labels = torch.tensor(memory_data_loader.dataset.targets, device=feature_bank.device)   # tensor of labels (N*number of minibatches)
 
         # loop test data to predict the label by weighted knn search 
+        print("Calculating accuracy")
         for i, (data, target) in enumerate(test_data_loader):   # iterate on test dataset
             data, target = data.cuda(non_blocking=True), target.cuda(non_blocking=True)
             feature = model(data)   # NxC
@@ -495,10 +403,14 @@ def knn_test(model, memory_data_loader, test_data_loader, epoch, writer, args):
             if i % args.print_freq == 0:
                 print('KNN Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
     
+    end = time.time()
     # statistics to be written at the end of every epoch
-    writer.add_scalar('Training Accuracy/epoch top1 accuracy',
+    writer.add_scalar('KNN Test Accuracy/epoch top1 accuracy',
                 total_top1 / total_num * 100,
                 epoch)     
+    writer.add_scalar('KNN Test Time/epoch time',
+                end - start,
+                epoch) 
     print('KNN Test Epoch: [{}][{}/{}] Acc@1:{:.2f}%'.format(epoch, i, len(test_data_loader), total_top1 / total_num * 100))
     return total_top1 / total_num * 100
 
@@ -587,6 +499,7 @@ def adjust_learning_rate(optimizer, epoch, args):
     lr = args.lr
     if args.keep_lr:    # if you want to continue training after cosine schedule cycle completed 
                         # keeping fixed the last lr value
+        print("mantengo lr")
         lr = optimizer.param_groups[0]['lr']
     else:
         if args.cos:  # cosine lr schedule

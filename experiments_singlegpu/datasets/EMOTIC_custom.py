@@ -271,7 +271,7 @@ class EMOTIC(Dataset):
 class EMOTICPair(EMOTIC):
     """
         Extends EMOTIC Dataset 
-        Is used for unsupervised learning. It will return two augmentation of the i-th image. 
+        It will return a pair for every image. Is used for self-supervised learning. 
         If you pass at constructor trasform as {"augmentation_1": ..., "agumentation_2": ..} two different trasnformation will be applied.
         If you pass a simple transform, the same transformation will be applied to the two augmentations
     """
