@@ -1,5 +1,8 @@
 """
     Example of moco training config file
+    required
+        - dataset
+        - moco
 """
 dataset = dict(
     img_size = 224,

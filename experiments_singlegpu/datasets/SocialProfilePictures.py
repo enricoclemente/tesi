@@ -10,13 +10,12 @@ from PIL import Image
 """
     Social Profile Pictures Dataset
 
-    The dataset contains is a composite one, it is created starting from several datasets in order to reproduce a
+    The dataset is a composite one, it is created from several datasets in order to reproduce a
     real life scenario of social media profile pictures like Facebook Profile Pictures
 
     Labels:
-    
-    Statistics:
-
+        There are hierchical labels on 3 levels, target labels are chosen before during the creation 
+        of metadata of the dataset 
 """
 class SocialProfilePictures(Dataset):
     """
@@ -42,6 +41,12 @@ class SocialProfilePictures(Dataset):
         aspect_ratio_threshold (float): use it to filter images that have a greater aspect ratio
         dim_threshold (float): use it to filter images which area is 
             lower of = dim_threshold * dim_threshold * 1/aspect_ratio_threshold
+    Attributes:
+        - metadata
+        - targets
+        - classes_map
+        - classes_count
+        - classes
     """
     def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8,
                 transform: Optional[Callable] = None, partition_perc: float = 1.0,
@@ -73,7 +78,6 @@ class SocialProfilePictures(Dataset):
         self.metadata, self.targets, self.classes_map, self.classes_count = self._read_metadata()
         self.classes = list(self.classes_map.keys())
         
-
     
     """
         Read all metadata related to dataset in order to compose it
@@ -178,8 +182,8 @@ class SocialProfilePicturesPair(SocialProfilePictures):
     """
         Extends SocialProfilePictures Dataset 
         It will return a pair for every image. Is used for self-supervised learning. 
-        If you pass at constructor trasform as {"augmentation_1": ..., "agumentation_2": ..} two different trasnformation will be applied.
-        If you pass a simple transform, the same transformation will be applied to the two augmentations
+        If you pass at constructor trasform as {"augmentation_1": ..., "agumentation_2": ..} two different transformation will be applied.
+        If you pass a simple transform, the same transformation will be applied to the pair
     """
     def __getitem__(self, idx):
         if torch.is_tensor(idx):

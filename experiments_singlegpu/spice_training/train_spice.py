@@ -20,16 +20,16 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 import numpy as np
 
-from spice.config import Config
-from spice.data.augment import Augment, Cutout
+from SPICE.spice.config import Config
+from SPICE.spice.data.augment import Augment, Cutout
 from torchvision.datasets import CIFAR10
 from experiments_singlegpu.datasets.CIFAR10_custom import CIFAR10Pair
 
-import moco.builder
-from spice.model.feature_modules.resnet_cifar import resnet18_cifar
+import SPICE.moco.builder
+from SPICE.spice.model.feature_modules.resnet_cifar import resnet18_cifar
 from experiments_singlegpu.spice_model import SPICEModel
-from spice.model.heads.sem_head_multi import SemHeadMulti
-from spice.utils.evaluation import calculate_acc, calculate_nmi, calculate_ari
+from SPICE.spice.model.heads.sem_head_multi import SemHeadMulti
+from SPICE.spice.utils.evaluation import calculate_acc, calculate_nmi, calculate_ari
 
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
@@ -82,7 +82,7 @@ def main():
 
     # create SPICE model
     # first get encoder from self-supervised model and load wieghts
-    moco_model = moco.builder.MoCo(
+    moco_model = SPICE.moco.builder.MoCo(
         base_encoder=resnet18_cifar,
         dim=cfg.moco.moco_dim, K=cfg.moco.moco_k, m=cfg.moco.moco_m, T=cfg.moco.moco_t, mlp=cfg.moco.mlp)
     

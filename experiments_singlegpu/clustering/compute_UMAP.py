@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import sys
-import random
 import os
 import argparse
 sys.path.insert(0, './')
@@ -19,16 +18,22 @@ from experiments_singlegpu.datasets.utils.custom_transforms import PadToSquare
 
 import matplotlib.pyplot as plt
 import cuml
-import umap
+# import umap
 
 
 parser = argparse.ArgumentParser(description='UMAP calculator')
-parser.add_argument('--n_components', type=int, default=2,
-                    help='number of components to execute manifold')
-parser.add_argument('--features_folder', metavar='DIR', default='./results/cifar10/moco',
+parser.add_argument('--features_folder', metavar='DIR', default='./features',
                     help='path to previously calculated features')
-parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
+parser.add_argument('--save_folder', metavar='DIR', default='./results',
                     help='path to results')
+parser.add_argument('--n_components', type=int, default=2,
+                    help='umap number of components')
+parser.add_argument('--n_neighbors', type=int, default=15,
+                    help='umap number of neighbors')
+parser.add_argument('--min_dist', type=float, default=0.0,
+                    help='umap minimum distance')
+parser.add_argument('--n_epochs', type=int, default=500,
+                    help='umap number of epochs')
 
 def main():
     args = parser.parse_args()
@@ -95,19 +100,20 @@ def main():
         np.save("{}/targets.npy".format(args.save_folder), targets)
     else:
         print("Loading previously calculated features and targets")
-        features = np.load("{}/features.npy".format(args.save_folder))
-        targets = np.load("{}/targets.npy".format(args.save_folder))
+        features = np.load("{}/features.npy".format(args.features_folder))
+        targets = np.load("{}/targets.npy".format(args.features_folder))
 
-    exit()
+    # exit()
 
+    hyper_params = "n_neighbors_{}_min_dist_{}_n_epochs_{}".format(args.n_neighbors, args.min_dist, args.n_epochs)
     # calculating UMAP
-    if not os.path.isfile("{}/umap_{}_components.npy".format(args.save_folder, args.n_components)):
+    if not os.path.isfile("{}/umap_{}.npy".format(args.save_folder, hyper_params)):
         print("Calculating UMAP")
         reducer = cuml.UMAP(
-                            n_neighbors=30,
+                            n_neighbors=args.n_neighbors,
                             n_components=args.n_components,
-                            min_dist=0.25,
-                            n_epochs=1000
+                            min_dist=args.min_dist,
+                            n_epochs=args.n_epochs
                         ).fit(features)
         
         # umap = reducer.fit_transform(features)
@@ -115,14 +121,15 @@ def main():
         #                     n_components=args.n_components,
         #                     min_dist=0.0).fit(features)
         embedding = reducer.transform(features)
-        np.save("{}/umap_{}_components.npy".format(args.save_folder, args.n_components), embedding)
+        np.save("{}/umap_{}.npy".format(args.save_folder, hyper_params), embedding)
     else:
         print("Loading UMAP")
-        embedding = np.load("{}/umap_{}_components.npy".format(args.save_folder, args.n_components))
+        embedding = np.load("{}/umap_{}.npy".format(args.save_folder, hyper_params))
 
     # plot only 2d results
     if args.n_components == 2:
-
+        print("Plotting UMAP")
+        
         colors_per_class = {}
         for class_name in dataset.classes:
             colors_per_class[class_name] = list(np.random.choice(range(256), size=3))
@@ -159,8 +166,8 @@ def main():
         legendFig.legend(plots, dataset.classes, loc='center')
 
         # finally, show the plot
-        fig.savefig('{}/UMAP.svg'.format(args.save_folder))
-        legendFig.savefig('{}/UMAP_legend.svg'.format(args.save_folder))
+        fig.savefig('{}/UMAP_{}.svg'.format(args.save_folder, hyper_params))
+        # legendFig.savefig('{}/UMAP_legend.svg'.format(args.save_folder))
 
         plt.close()
 
@@ -190,92 +197,8 @@ def main():
         ax.legend(bbox_to_anchor=(1.0, 1.0))
 
         # finally, show the plot
-        fig.savefig('{}/UMAP_2x.svg'.format(args.save_folder))
-
+        fig.savefig('{}/UMAP_2x_{}.svg'.format(args.save_folder, hyper_params))
         plt.close()
-
-        ############################################################
-        # create figures but with black background
-        plt.style.use('dark_background')
-
-        # initialize a matplotlib plot
-        fig = plt.figure("UMAP", figsize=(20,15))
-
-        ax = fig.add_subplot(111)
-        box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-
-        plots = list(range(len(dataset.classes)))
-        # for every class, we'll add a scatter plot separately
-        for class_index, class_name in enumerate(dataset.classes):
-            # find the samples of the current class in the data
-            indices = [i for i, l in enumerate(targets) if l == class_index]
-
-            # extract the coordinates of the points of this class only
-            current_tx = np.take(tx, indices)
-            current_ty = np.take(ty, indices)
-
-            # convert the class color to matplotlib format
-            color = np.array(colors_per_class[class_name], dtype=float) / 255
-
-            # add a scatter plot with the corresponding color and label
-            plots[class_index] = ax.scatter(current_tx, current_ty,  c=color, label=class_name)
-        
-        # build a legend using the labels we set previously
-        ax.legend(bbox_to_anchor=(1.0, 1.0))
-        legendFig = plt.figure("UMAP legend", figsize=(5,7))
-        legendFig.legend(plots, dataset.classes, loc='center')
-
-        # finally, show the plot
-        fig.savefig('{}/UMAP_black.svg'.format(args.save_folder))
-
-        plt.close()
-
-        # plotting 2d t-SNE at double dims
-        fig = plt.figure("UMAP 2x", figsize=(40,30))
-
-        ax = fig.add_subplot(111)
-        box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-
-        plots = list(range(len(dataset.classes)))
-        # for every class, we'll add a scatter plot separately
-        for class_index, class_name in enumerate(dataset.classes):
-            # find the samples of the current class in the data
-            indices = [i for i, l in enumerate(targets) if l == class_index]
-
-            # extract the coordinates of the points of this class only
-            current_tx = np.take(tx, indices)
-            current_ty = np.take(ty, indices)
-
-            # convert the class color to matplotlib format
-            color = np.array(colors_per_class[class_name], dtype=float) / 255
-
-            # add a scatter plot with the corresponding color and label
-            plots[class_index] = ax.scatter(current_tx, current_ty,  c=color, label=class_name)
-        
-        ax.legend(bbox_to_anchor=(1.0, 1.0))
-
-        # finally, show the plot
-        fig.savefig('{}/UMAP_2x_black.svg'.format(args.save_folder))
-
-        plt.close()
-
-
-
-
-    
-# scale and move the coordinates so they fit [0; 1] range
-def scale_to_01_range(x):
-    # compute the distribution range
-    value_range = (np.max(x) - np.min(x))
-
-    # move the distribution so that it starts from zero
-    # by extracting the minimal value from all its values
-    starts_from_zero = x - np.min(x)
-
-    # make the distribution fit [0; 1] by dividing by its range
-    return starts_from_zero / value_range
 
 if __name__ == '__main__':
     main()

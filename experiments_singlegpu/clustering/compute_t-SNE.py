@@ -21,6 +21,8 @@ from sklearn.manifold import TSNE
 
 
 parser = argparse.ArgumentParser(description='t-SNE calculator')
+parser.add_argument('--features_folder', metavar='DIR', default='./features',
+                    help='path to previously calculated features')
 parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
                     help='path to results')
 
@@ -35,8 +37,8 @@ def main():
     dataset = SocialProfilePictures(root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets', split=['train', 'validation', 'test'],
                     transform=transforms.Compose([PadToSquare(), transforms.Resize([224, 224]), transforms.ToTensor()]))
 
-    if not (os.path.isfile("{}/features.npy".format(args.save_folder)) 
-            and os.path.isfile("{}/targets.npy".format(args.save_folder))):
+    if not (os.path.isfile("{}/features.npy".format(args.features_folder)) 
+            and os.path.isfile("{}/targets.npy".format(args.features_folder))):
         print("No presaved features and targets found!")
         model = resnet18(pretrained=True)
         # removing fc layer
@@ -85,8 +87,8 @@ def main():
         np.save("{}/targets.npy".format(args.save_folder), targets)
     else:
         print("Loading previously calculated features and targets")
-        features = np.load("{}/features.npy".format(args.save_folder))
-        targets = np.load("{}/targets.npy".format(args.save_folder))
+        features = np.load("{}/features.npy".format(args.features_folder))
+        targets = np.load("{}/targets.npy".format(args.features_folder))
 
 
     # extracting and plotting 2d t-SNE
@@ -107,8 +109,8 @@ def main():
     tx = tsne_2d[:, 0]
     ty = tsne_2d[:, 1]
 
-    tx = scale_to_01_range(tx)
-    ty = scale_to_01_range(ty)
+    # tx = scale_to_01_range(tx)
+    # ty = scale_to_01_range(ty)
 
 
     # initialize a matplotlib plot
@@ -132,7 +134,7 @@ def main():
         color = np.array(colors_per_class[class_name], dtype=float) / 255
 
         # add a scatter plot with the corresponding color and label
-        plots[class_index] = ax.scatter(current_tx, current_ty,  c=color, label=class_name)
+        plots[class_index] = ax.scatter(current_tx, current_ty, s=5, c=color, label=class_name)
     
     # build a legend using the labels we set previously
     ax.legend(bbox_to_anchor=(1.0, 1.0))
@@ -166,7 +168,7 @@ def main():
         color = np.array(colors_per_class[class_name], dtype=float) / 255
 
         # add a scatter plot with the corresponding color and label
-        plots[class_index] = ax.scatter(current_tx, current_ty,  c=color, label=class_name)
+        plots[class_index] = ax.scatter(current_tx, current_ty, s=5, c=color, label=class_name)
     
     ax.legend(bbox_to_anchor=(1.0, 1.0))
 

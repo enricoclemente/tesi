@@ -105,7 +105,7 @@ def main():
 
     torch.cuda.set_device(torch.cuda.current_device())
 
-    # 
+    
     base_encoder = models.resnet18
     pair_train_dataset = None
     original_test_dataset = None
