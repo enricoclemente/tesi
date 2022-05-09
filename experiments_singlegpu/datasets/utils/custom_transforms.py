@@ -15,3 +15,10 @@ class PadToSquare():
             return transforms.Pad(padding=[(W-H)//2, 0])(img)
 
         return img  
+
+class DoNothing():
+    """
+        This function takes image and do nothing. It is useful for parametric callable transformation
+    """
+    def __call__(self, img):
+        return img

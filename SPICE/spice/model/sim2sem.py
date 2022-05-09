@@ -1,6 +1,6 @@
 import torch.nn as nn
-from .heads import build_head
-from .feature_modules import build_feature_module
+from SPICE.spice.model.heads import build_head
+from SPICE.spice.model.feature_modules import build_feature_module
 import torch
 
 

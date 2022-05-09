@@ -1,5 +1,5 @@
-from .sem_head import SemHead
-from .sem_head_multi import SemHeadMulti
+from SPICE.spice.model.heads.sem_head import SemHead
+from SPICE.spice.model.heads.sem_head_multi import SemHeadMulti
 
 
 def build_head(head_cfg_ori):

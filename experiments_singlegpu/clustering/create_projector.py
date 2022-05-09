@@ -14,6 +14,7 @@ import torch.utils.data.distributed
 import torchvision.transforms as transforms
 
 from torch.utils.tensorboard import SummaryWriter
+from SPICE.spice.config import Config
 from SPICE.spice.model.feature_modules.resnet_cifar import resnet18_cifar
 from torchvision.models import resnet18
 
@@ -23,11 +24,14 @@ from experiments_singlegpu.datasets.SocialProfilePictures import SocialProfilePi
 from experiments_singlegpu.datasets.utils.custom_transforms import PadToSquare
 
 
-
 parser = argparse.ArgumentParser(description='Tensorboard Projector Creator')
+parser.add_argument("--config_file", default="./experiments_config_example.py", metavar="FILE",
+                    help="path to config file", type=str)
+parser.add_argument('--dataset', default="cifar10", type=str,
+                    help="name of the dataset, this lead to different script choices")
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
-parser.add_argument('--pretrained_model', default=None, type=str, metavar='PATH',
+parser.add_argument('--model_path', default=None, type=str, metavar='PATH',
                     help='path to previously trained model')
 parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/moco/logs',
                     help='path to tensorboard logs')
@@ -36,14 +40,13 @@ parser.add_argument('--batch-size', default=128, type=int,
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-# dataset
-parser.add_argument('--dataset', default="cifar10", type=str,
-                    help="name of the dataset, this lead to different script choices")
 
 
 def main():
     args = parser.parse_args()
     print(args)
+    cfg = Config.fromfile(args.config_file)
+
 
     # setting of logs_folder
     if not os.path.exists(args.logs_folder):
@@ -57,68 +60,60 @@ def main():
     torch.cuda.set_device(torch.cuda.current_device())
 
     model = None
-
-    train_dataset = None
     test_dataset = None
-    train_dataset_sprites = None
     test_dataset_sprites = None
+
+    dataset_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)
     if args.dataset == 'cifar10':
         # creating model MoCo using resnet18_cifar which is an implementation adapted for CIFAR10
         model = resnet18_cifar()
 
-        train_dataset = CIFAR10(root=args.dataset_folder, train=True, 
-                transform=transforms.Compose([transforms.ToTensor()]),  
-                download=True)
         test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
                 transform=transforms.Compose([transforms.ToTensor()]),  
                 download=True)
     elif args.dataset == 'socialprofilepictures':
-        model = resnet18(pretrained=True if not args.pretrained_model else False)
+        model = resnet18(pretrained=True if not args.model_path else False)
 
-        train_dataset = SocialProfilePictures(root=args.dataset_folder, split='train', 
-                transform=transforms.Compose([ PadToSquare(), transforms.Resize([225, 225]), transforms.ToTensor()]))
-        train_dataset_sprites = SocialProfilePictures(root=args.dataset_folder, split='train', 
-                transform=transforms.Compose([ PadToSquare(), transforms.Resize([64, 64]), transforms.ToTensor()]))
-        test_dataset = SocialProfilePictures(root=args.dataset_folder, split=['validation'], 
-                transform=transforms.Compose([ PadToSquare(), transforms.Resize([225, 225]), transforms.ToTensor()]))
-        test_dataset_sprites = SocialProfilePictures(root=args.dataset_folder, split=['validation'], 
-                transform=transforms.Compose([ PadToSquare(), transforms.Resize([100, 100]), transforms.ToTensor()]))
+        test_dataset = SocialProfilePictures(root=args.dataset_folder, split=['test'], 
+                transform=transforms.Compose([ PadToSquare(),
+                                                transforms.Resize([224, 224]), 
+                                                transforms.ToTensor()]))
+        test_dataset_sprites = SocialProfilePictures(root=args.dataset_folder, split=['test'], 
+                transform=transforms.Compose([ PadToSquare(), 
+                                                transforms.Resize([64, 64]), 
+                                                transforms.ToTensor()]))
     else:
         raise NotImplementedError("Choose a valid dataset!")
 
     # optionally resume from a checkpoint
-    if args.pretrained_model:
-        if os.path.isfile(args.pretrained_model):
-            print("=> loading model parameters '{}'".format(args.pretrained_model))
+    if args.model_path:
+        if os.path.isfile(args.model_path):
+            print("=> loading model parameters '{}'".format(args.model_path))
             # Map model to be loaded to specified single gpu.
             loc = 'cuda:{}'.format(torch.cuda.current_device())
-            checkpoint = torch.load(args.pretrained_model, map_location=loc)
+            checkpoint = torch.load(args.model_path, map_location=loc)
             prev_parameteres = model.parameters()
-            print(checkpoint['state_dict'])
-            if 'state_dict' in checkpoint.keys(): 
-                model.load_state_dict(checkpoint['state_dict'], strict=False)
-            else:
-                model.load_state_dict(checkpoint, strict=False)
-            assert prev_parameteres != model.parameters(), "Model not loaded properly!"
-            # print("Resume's state_dict:")
-            # for param_tensor in model.state_dict():
-            #     print(param_tensor, "\t", model.state_dict()[param_tensor].size())
-            #     print(param_tensor, "\t", model.state_dict()[param_tensor])
+            state_dict = dict()
+            for key in checkpoint['state_dict']:
+                print(key)
+                if key.startswith("encoder_q"):
+                    state_dict[key[10:]] = checkpoint['state_dict'][key]
+            
+            model.load_state_dict(state_dict, strict=False)
         else:
-            raise NotImplementedError("=> no checkpoint found at '{}'".format(args.pretrained_model))
+            raise NotImplementedError("=> no checkpoint found at '{}'".format(args.model_path))
+    else:
+        print("Model path not specified, if the dataset is SPP, pretrained model on ImageNet will be used")
 
 
     # remove fc from encoder in order to get features
-    model = torch.nn.Sequential(*(list(model.children())[:-1]))
+    model = torch.nn.Sequential(*(list(model.children())[:-1])).cuda()
     print(model)
-    model = model.cuda()
     cudnn.benchmark = True  # A bool that, if True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest.
 
     # tensorboard plotter
-    train_writer = SummaryWriter(args.logs_folder + "/train_projector")
     test_writer = SummaryWriter(args.logs_folder + "/test_projector")
 
-    # create_projector(model, train_dataset, train_dataset_sprites, train_writer, 'layer_4', args)
     create_projector(model, test_dataset, test_dataset_sprites, test_writer, 'layer_4', args)
 
     
@@ -128,7 +123,7 @@ def create_projector(model, dataset, dataset_sprites, writer, layer_name, args):
     features, images, metadata = [], [], []
     with torch.no_grad():
         # generate feature bank from train dataset
-        print("\tExtracting features from images")
+        print("Extracting features from images")
         data_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=1, 
             pin_memory=True, drop_last=False)
         for i, (data, _) in enumerate(data_loader):
@@ -142,7 +137,7 @@ def create_projector(model, dataset, dataset_sprites, writer, layer_name, args):
 
         features = torch.cat(features, dim=0).numpy() # concatenates all features tensors [NxC],[NxC],... to obtain a unique tensor of features 
                                                                     # for all the dataset DxC
-        print("\tCollecting sprites")
+        print("Collecting sprites")
         data_loader = torch.utils.data.DataLoader(dataset_sprites, batch_size=args.batch_size, shuffle=False, num_workers=1, 
             pin_memory=True, drop_last=False)
         for i, (data, _) in enumerate(data_loader):
@@ -152,11 +147,11 @@ def create_projector(model, dataset, dataset_sprites, writer, layer_name, args):
         
         images = torch.cat(images, dim=0)  # same for images
 
-        print("\tCollecting labels")
+        print("Collecting labels")
         for i in range(len(dataset)):
             metadata.append(dataset.metadata[i]['target']['target_level'])
 
-        print("\tCreating projector")
+        print("Creating projector")
         writer.add_embedding(features, metadata=metadata, label_img=images, tag=layer_name)
 
 if __name__ == '__main__':

@@ -7,15 +7,20 @@ import scipy.io
 from PIL import Image
 
 import numpy as np
+import matplotlib.pyplot as plt
+
 
 """
     EMOTions In Context (EMOTIC) Dataset implementation for pytorch
     site: http://sunai.uoc.edu/emotic/
     paper: http://sunai.uoc.edu/emotic/pdf/emotic_pami2019.pdf
     The dataset is focused on emotions in context
-    The dataset is split in train, val, and test (respectively 70%, 10%, 20%)
+    Warning! Part of dataset is ignored: images in the folder ade20k are not taken 
+        because of the purpose of creating SPP dataset. 
+        Other dataset SUN397 is composed with ade20k images
 
-    Annotations are made for each person in the image and are the following:
+
+    Extre annotations are made for each person in the image and are the following:
     - bounding box: (x,y) starting point, width and height
     - emotion categories: there are 26 different emotion categories
     - continuous dimensions: emotions classified by VAD (Valence, Arousal and Dominance) model, 1 value for each dimension
@@ -230,7 +235,7 @@ class EMOTIC(Dataset):
                             
                             targets.append(target)
                         meta['target'] = {'level1': 'nonselfie', 
-                                            # 'level1_attributes': targets,
+                                            'extra_annotations': targets,
                                             'level2': 'nonselfie', 
                                             'level3': 'nonselfie', }
 
@@ -256,10 +261,6 @@ class EMOTIC(Dataset):
             img = img.convert('RGB')
         
         target = self.targets[idx]
-        # padding target to have all targets of the same dimension
-        # if len(target) < self.longest_target:
-        #     for i in range(self.longest_target - len(target)):
-        #         target.append(-1)
         
         if self.transform is not None:
             img = self.transform(img)
@@ -293,6 +294,78 @@ class EMOTICPair(EMOTIC):
         return augmentation_1, augmentation_2
 
 
+
+def calculate_percentage_person_over_background(root):
+
+    dataset = EMOTIC(root, split=["train", "test"], aspect_ratio_threshold=2.33, dim_threshold=225)
+
+    # print(dataset.metadata[0])
+    # print(dataset.metadata[0]['target']['extra_annotations'])
+    # extra_annotations = dataset.metadata[0]['target']['extra_annotations']
+
+    # print(len(extra_annotations))
+    # print(extra_annotations[0]['bbox'])
+
+    images_people_ratios_total = {}
+    images_people_ratios_mscoco = {}
+    images_people_ratios_emodb = {}
+    for i, (img, target) in enumerate(dataset):
+        W, H = img.size
+        img_area = W*H
+        people_area = 0
+        extra_annotations = dataset.metadata[i]['target']['extra_annotations']
+        for j in range(len(extra_annotations)):
+            people_area += extra_annotations[j]['bbox'][2]*extra_annotations[j]['bbox'][3]
+        
+        ratio = round(people_area/img_area, 2)
+        if ratio not in images_people_ratios_total:
+            images_people_ratios_total[ratio] = 0
+        else:
+            images_people_ratios_total[ratio] += 1
+        
+        if 'mscoco' in dataset.metadata[i]['img_folder']:
+            if ratio not in images_people_ratios_mscoco:
+                images_people_ratios_mscoco[ratio] = 0
+            else:
+                images_people_ratios_mscoco[ratio] += 1
+        else:
+            if ratio not in images_people_ratios_emodb:
+                images_people_ratios_emodb[ratio] = 0
+            else:
+                images_people_ratios_emodb[ratio] += 1
+        # print(area)
+        # print(people_area)
+        # if i == 0: 
+        #     exit()
+
+    images_people_ratios_total_sorted = {}
+    for key, value in sorted(images_people_ratios_total.items(), key=lambda item: item[0]):
+        images_people_ratios_total_sorted[key] = value
+    images_people_ratios_mscoco_sorted = {}
+    for key, value in sorted(images_people_ratios_mscoco.items(), key=lambda item: item[0]):
+        images_people_ratios_mscoco_sorted[key] = value
+    images_people_ratios_emodb_sorted = {}
+    for key, value in sorted(images_people_ratios_emodb.items(), key=lambda item: item[0]):
+        images_people_ratios_emodb_sorted[key] = value
+    # print(images_people_ratios_total_sorted)
+    plt.figure('Ratio people/image')
+    fig, (ax0, ax1) = plt.subplots(2,1, figsize=(13, 10))
+    plot_total, = ax0.plot(images_people_ratios_total_sorted.keys(), images_people_ratios_total_sorted.values(), label='mscoco + emodb', color='green')
+    ax0.fill_between(images_people_ratios_total_sorted.keys(), images_people_ratios_total_sorted.values(), color='green')    
+    plot_mscoco, = ax1.plot(images_people_ratios_mscoco_sorted.keys(), images_people_ratios_mscoco_sorted.values(), label='mscoco', color='yellow')
+    ax1.fill_between(images_people_ratios_mscoco_sorted.keys(), images_people_ratios_mscoco_sorted.values(), color='yellow')
+    plot_emodb, = ax1.plot(images_people_ratios_emodb_sorted.keys(), images_people_ratios_emodb_sorted.values(),label='emodb', color='blue')
+    ax1.fill_between(images_people_ratios_emodb_sorted.keys(), images_people_ratios_emodb_sorted.values(), color='blue')
+
+    ax0.legend(loc='upper right')
+    ax1.legend(loc='upper right')
+    ax0.set_xlabel('ratio')
+    ax0.set_ylabel('number of images')
+    ax1.set_xlabel('ratio')
+    ax1.set_ylabel('number of images')
+    ax0.set_title('Ratio area occupied by people / image total area')
+    plt.savefig("./ratio_people_area_image_area.svg")
+    plt.close()
         
 
 

@@ -25,13 +25,17 @@ from SPICE.spice.utils.evaluation import calculate_acc, calculate_nmi, calculate
 parser = argparse.ArgumentParser(description='UMAP+GMM calculator (experiments)')
 parser.add_argument('--features_folder', metavar='DIR', default='./features',
                     help='path to previously calculated features')
+parser.add_argument('--model_path', type=str, default='./results/checkpoint_last.pth.tar',
+                    help='The pretrained model path')
 parser.add_argument('--save_folder', metavar='DIR', default='./results',
                     help='path to results')
+parser.add_argument('--features_layer', type=str, default='layer4',
+                    help='layer from which to extract features')
 parser.add_argument('--umap_n_components', type=int, default=2,
                     help='umap number of components')
 parser.add_argument('--umap_n_epochs', type=int, default=1000,
                     help='umap number of epochs to train')
-parser.add_argument('--gmm_n_components', type=int, default=2,
+parser.add_argument('--gmm_n_components', type=int, default=25,
                     help='gmm number of components')
 
 
@@ -43,20 +47,42 @@ def main():
         os.makedirs(args.save_folder)
     
     dataset = SocialProfilePictures(root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets', split=['train','val','test'],
-                    transform=transforms.Compose([PadToSquare(), transforms.Resize([224, 224]), transforms.ToTensor()]))
+                    transform=transforms.Compose([  PadToSquare(), 
+                                                    transforms.Resize([224, 224]), 
+                                                    transforms.ToTensor()]))
 
     if not (os.path.isfile("{}/features.npy".format(args.features_folder)) 
             and os.path.isfile("{}/targets.npy".format(args.features_folder))):
         print("No presaved features and targets found!")
-        model = resnet18(pretrained=True)
-        # removing fc and avg layer
-        model = torch.nn.Sequential(*(list(model.children())[:-1]))
+        model = resnet18()
+        if not os.path.isfile(args.model_path):
+            # if not available a previously trained model on moco use pretrained one on Imagenet
+            model = resnet18(pretrained=True)
+        else:
+            model = resnet18(num_classes=128)
+            loc = 'cuda:{}'.format(torch.cuda.current_device())
+            checkpoint = torch.load(args.model_path, map_location=loc)
+            # 
+            dim_mlp = model.fc.in_features
+            model.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), model.fc)
+            state_dict = dict()
+            for key in checkpoint['state_dict']:
+                print(key)
+                if key.startswith("encoder_q"):
+                    # print(key[22:])
+                    state_dict[key[10:]] = checkpoint['state_dict'][key]
+            model.load_state_dict(state_dict, strict=False)
+       
+        
+        if args.features_layer == 'layer4':
+            # removing fc layer 
+            model = torch.nn.Sequential(*(list(model.children())[:-1]))
+        
         for p in model.parameters():
             p.requires_grad = False
 
         print(model)
         model.cuda()
-
 
         loader = torch.utils.data.DataLoader(dataset, batch_size=512, shuffle=False, num_workers=1, 
                     pin_memory=True, drop_last=False)
@@ -66,24 +92,21 @@ def main():
         targets = []
 
         model.eval()
-
         with torch.no_grad():
             for i, (img, target) in enumerate(loader):
                 img = img.cuda()
 
                 feature = model.forward(img)
-                feature = torch.flatten(feature, 1)
-                feature = F.normalize(feature, dim=1)
+                if args.features_layer == 'layer4':
+                    # flattening and normalizing if extracting from non fc layers
+                    feature = torch.flatten(feature, 1)
+                    feature = F.normalize(feature, dim=1)
 
                 # collecting all features and targets
                 features.append(feature.cpu())
                 targets.append(target)
                 
-                # print(target[0].item())
-                # exit()
                 print("[{}]/[{}] batch iteration".format(i, len(loader)))
-                # if i == 2:
-                #     break
 
         features = torch.cat(features)
         features = features.numpy()
@@ -99,19 +122,27 @@ def main():
         targets = np.load("{}/targets.npy".format(args.features_folder))
 
 
+    best_acc = 0.0
+    best_acc_hyperparams = ""
+    
     n_neighbors_values = [5, 10, 20, 50]
     min_dist_values = [0.0, 0.1, 0.25, 0.5]
-
-    best_acc = 0
-    best_acc_hyperparams = ""
     for n_neighbors in n_neighbors_values:
         for min_dist in min_dist_values:
             """
                 Compute UMAP
             """
-            umap_hyperparams = "n_components_{}_n_neighbors_{}_min_dist_{}_n_epochs_{}".format(args.umap_n_components,n_neighbors, min_dist, args.n_epochs)
+            umap_hyperparams = "n_components_{}_n_neighbors_{}_min_dist_{}_n_epochs_{}".format(args.umap_n_components,n_neighbors, min_dist, args.umap_n_epochs)
+            gmm_hyperparams = "n_components_{}".format(args.gmm_n_components)
+            
+            save_subfolder = "umap_"+umap_hyperparams+"_gmm_"+gmm_hyperparams
+            save_subfolder = os.path.join(args.save_folder, save_subfolder)
+            # setting subfolder for experiment
+            if not os.path.exists(save_subfolder):
+                os.makedirs(save_subfolder)
+
             # calculating UMAP
-            if not os.path.isfile("{}/umap_{}.npy".format(args.save_folder, umap_hyperparams)):
+            if not os.path.isfile("{}/umap_{}.npy".format(save_subfolder, umap_hyperparams)):
                 print("Calculating UMAP with {}".format(umap_hyperparams))
                 reducer = cuml.UMAP(
                                     n_neighbors=n_neighbors,
@@ -120,13 +151,13 @@ def main():
                                     n_epochs=args.umap_n_epochs
                                 ).fit(features)
                 embedding = reducer.transform(features)
-                np.save("{}/umap_{}.npy".format(args.save_folder, umap_hyperparams), embedding)
+                np.save("{}/umap_{}.npy".format(save_subfolder, umap_hyperparams), embedding)
             else:
                 print("Loading UMAP with {}".format(umap_hyperparams))
-                embedding = np.load("{}/umap_{}.npy".format(args.save_folder, umap_hyperparams))
+                embedding = np.load("{}/umap_{}.npy".format(save_subfolder, umap_hyperparams))
             
             if args.umap_n_components != 2:
-                if not os.path.isfile("{}/umap_{}.npy".format(args.save_folder, umap_hyperparams)):
+                if not os.path.isfile("{}/umap_2d_{}.npy".format(save_subfolder, umap_hyperparams)):
                     print("Calculating 2d UMAP with {}".format(umap_hyperparams))
                     reducer_2d = cuml.UMAP(
                                         n_neighbors=n_neighbors,
@@ -135,10 +166,10 @@ def main():
                                         n_epochs=args.umap_n_epochs
                                     ).fit(features)
                     embedding_2d = reducer_2d.transform(features)
-                    np.save("{}/umap_2d_{}.npy".format(args.save_folder, umap_hyperparams), embedding_2d)
+                    np.save("{}/umap_2d_{}.npy".format(save_subfolder, umap_hyperparams), embedding_2d)
                 else:
                     print("Loading UMAP with {}".format(umap_hyperparams))
-                    embedding_2d = np.load("{}/umap_2d_{}.npy".format(args.save_folder, umap_hyperparams)) 
+                    embedding_2d = np.load("{}/umap_2d_{}.npy".format(save_subfolder, umap_hyperparams)) 
             else:
                 embedding_2d = embedding
         
@@ -176,7 +207,7 @@ def main():
             legendFig.legend(plots, dataset.classes, loc='center')
 
             # finally, show the plot
-            fig.savefig('{}/UMAP_{}.svg'.format(args.save_folder, umap_hyperparams))
+            fig.savefig('{}/UMAP_{}.svg'.format(save_subfolder, umap_hyperparams))
             # legendFig.savefig('{}/UMAP_legend.svg'.format(args.save_folder))
             plt.close()
 
@@ -202,30 +233,35 @@ def main():
             ax.legend(bbox_to_anchor=(1.0, 1.0))
 
             # finally, show the plot
-            fig.savefig('{}/UMAP_2x_{}.svg'.format(args.save_folder, umap_hyperparams))
+            fig.savefig('{}/UMAP_2x_{}.svg'.format(save_subfolder, umap_hyperparams))
             plt.close()
 
             """
                 Compute GMM starting from previously calculated embeddings with UMAP
             """
-            gmm_hyperparams = "n_components_{}".format(args.gmm_n_components)
-            if not os.path.isfile("{}/gmm_{}_umap_{}.npy".format(args.save_folder, gmm_hyperparams, umap_hyperparams)):
-                print("Calculating GMM with {} on UMAP embedding with {}".format(umap_hyperparams, gmm_hyperparams))
-                gmm = GaussianMixture(n_components=args.n_components).fit(embedding)
+            
+            if not os.path.isfile("{}/gmm_{}_umap_{}.npy".format(save_subfolder, gmm_hyperparams, umap_hyperparams)):
+                print("Calculating GMM with {} on UMAP embedding with {}".format(gmm_hyperparams, umap_hyperparams))
+                gmm = GaussianMixture(n_components=args.gmm_n_components).fit(embedding)
                 predicted_cluster_labels = gmm.predict(embedding)
-                np.save("{}/gmm_{}_umap_{}.npy".format(args.save_folder, gmm_hyperparams, umap_hyperparams), predicted_cluster_labels)
+                np.save("{}/gmm_{}_umap_{}.npy".format(save_subfolder, gmm_hyperparams, umap_hyperparams), predicted_cluster_labels)
             else:
-                print("Loading GMM with {} on UMAP embedding with {}".format(umap_hyperparams, gmm_hyperparams))
-                predicted_cluster_labels = np.load("{}/gmm_{}_umap_{}.npy".format(args.save_folder, gmm_hyperparams, umap_hyperparams)) 
+                print("Loading GMM with {} on UMAP embedding with {}".format(gmm_hyperparams, umap_hyperparams))
+                predicted_cluster_labels = np.load("{}/gmm_{}_umap_{}.npy".format(save_subfolder, gmm_hyperparams, umap_hyperparams)) 
 
-            gt_labels = dataset.targets
-            acc = calculate_acc(predicted_cluster_labels, gt_labels)
+            gt_labels = targets
+            try:
+                acc = calculate_acc(predicted_cluster_labels, gt_labels)
+            except AssertionError as msg:
+                print("Clustering Accuracy failed: ") 
+                print(msg)
+                acc = -1
             nmi = calculate_nmi(predicted_cluster_labels, gt_labels)
             ari = calculate_ari(predicted_cluster_labels, gt_labels)
 
             print("Plotting GMM")
             colors_per_cluster = []
-            for cluster in range(args.n_components):
+            for cluster in range(args.gmm_n_components):
                 colors_per_cluster.append(list(np.random.choice(range(256), size=3)))
             
             colored_clusters = []
@@ -234,22 +270,22 @@ def main():
             fig = plt.figure("GMM", figsize=(20,15))
             ax = fig.add_subplot(111)
             ax.scatter(tx, ty, c=colored_clusters, s=5)
-            fig.savefig('{}/GMM_{}_UMAP_{}.svg'.format(args.save_folder, gmm_hyperparams, umap_hyperparams))
+            fig.savefig('{}/GMM_{}_UMAP_{}.svg'.format(save_subfolder, gmm_hyperparams, umap_hyperparams))
             plt.close()
 
             # plotting at double dims
             fig = plt.figure("GMM 2x", figsize=(40,30))
             ax = fig.add_subplot(111)
             ax.scatter(tx, ty, c=colored_clusters, s=5)
-            fig.savefig('{}/GMM_2x_{}_UMAP_{}.svg'.format(args.save_folder, gmm_hyperparams, umap_hyperparams))
+            fig.savefig('{}/GMM_2x_{}_UMAP_{}.svg'.format(save_subfolder, gmm_hyperparams, umap_hyperparams))
             plt.close()
 
             print("UMAP embedding with n_components={}, n_neighbors={}, min_dist={}".format(args.umap_n_components, n_neighbors, min_dist))
             print("\tGMM scores: ACC: {} NMI: {} ARI: {}".format(acc, nmi, ari))
 
             with open("{}/results.txt".format(args.save_folder), 'a') as file:
-                file.write("UMAP embedding with n_components={}, n_neighbors={}, min_dist={}".format(args.umap_n_components, n_neighbors, min_dist))
-                file.write("\tGMM scores: ACC: {} NMI: {} ARI: {}".format(acc, nmi, ari))
+                file.write("UMAP embedding with n_components={}, n_neighbors={}, min_dist={}\n".format(args.umap_n_components, n_neighbors, min_dist))
+                file.write("\tGMM scores: ACC: {} NMI: {} ARI: {}\n".format(acc, nmi, ari))
             
             if acc > best_acc:
                 best_acc = acc

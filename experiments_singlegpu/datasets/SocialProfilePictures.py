@@ -177,6 +177,28 @@ class SocialProfilePictures(Dataset):
         return img, target
 
 
+class SocialProfilePicturesPro(SocialProfilePictures):
+    """
+        Extends SocialProfilePictures Dataset 
+        It will return image, target and indices of the images. 
+        This is useful to investigate when using data loader with suffle and order of metadata is lost
+    """
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        img = Image.open(os.path.join(self.root, self.metadata[idx]['img_folder'], self.metadata[idx]['img_name']))
+
+        if img.mode == "1" or img.mode == "L" or img.mode == "P" or img.mode == "RGBA": # if gray-scale image convert into rgb
+            img = img.convert('RGB')
+
+        target = self.targets[idx]
+        
+        if self.transform is not None:
+            img = self.transform(img)
+        
+        return img, target, idx
+
 
 class SocialProfilePicturesPair(SocialProfilePictures):
     """

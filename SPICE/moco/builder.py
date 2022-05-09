@@ -8,7 +8,7 @@ class MoCo(nn.Module):
     Build a MoCo model with: a query encoder, a key encoder, and a queue
     https://arxiv.org/abs/1911.05722
     """
-    def __init__(self, base_encoder, dim=128, K=65536, m=0.999, T=0.07, mlp=False):
+    def __init__(self, base_encoder, dim=128, K=65536, m=0.999, T=0.07, mlp=False, query_encoder_pretrained=False, key_encoder_pretrained=False):
         """
         dim: feature dimension (default: 128)
         K: queue size; number of negative keys (default: 65536)
@@ -16,6 +16,7 @@ class MoCo(nn.Module):
         T: softmax temperature (default: 0.07)
         mlp: if to use mlp head instead of fc head (MoCov2)
         input_size: not yet discovered, for resnet_cifar architecture is useless
+        base_encoder_pretrained: if you want to train starting from weights of ImageNet training
         """
         super(MoCo, self).__init__()
 
@@ -27,6 +28,19 @@ class MoCo(nn.Module):
         # num_classes is the output fc dimension
         self.encoder_q = base_encoder(num_classes=dim)
         self.encoder_k = base_encoder(num_classes=dim)
+
+        
+        if query_encoder_pretrained == True or key_encoder_pretrained == True:
+            pretrained_state_dict = {}
+            pretrained_encoder = base_encoder(pretrained=True)
+            for key in pretrained_encoder.state_dict():
+                if not key.startswith('fc'):
+                    # collecting all parameters except for fc layer 
+                    pretrained_state_dict[key] = pretrained_encoder.state_dict()[key]
+            if query_encoder_pretrained == True: 
+                self.encoder_q.load_state_dict(pretrained_state_dict, strict=False)
+            if key_encoder_pretrained == True:
+                self.encoder_k.load_state_dict(pretrained_state_dict, strict=False)
 
         if mlp:  # hack: brute-force replacement
             dim_mlp = self.encoder_q.fc.in_features
