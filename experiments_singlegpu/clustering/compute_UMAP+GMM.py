@@ -20,13 +20,18 @@ import matplotlib.pyplot as plt
 import cuml
 from sklearn.mixture import GaussianMixture
 from SPICE.spice.utils.evaluation import calculate_acc, calculate_nmi, calculate_ari
+from SPICE.spice.config import Config
 
 
 parser = argparse.ArgumentParser(description='UMAP+GMM calculator (experiments)')
-parser.add_argument('--features_folder', metavar='DIR', default='./features',
-                    help='path to previously calculated features')
+parser.add_argument("--config_file", default="./experiments_config_example.py", metavar="FILE",
+                    help="path to config file (same used with moco training)", type=str)
+parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
+                    help='path to dataset')
 parser.add_argument('--model_path', type=str, default='./results/checkpoint_last.pth.tar',
                     help='The pretrained model path')
+parser.add_argument('--features_folder', metavar='DIR', default='./features',
+                    help='path to previously calculated features')
 parser.add_argument('--save_folder', metavar='DIR', default='./results',
                     help='path to results')
 parser.add_argument('--features_layer', type=str, default='layer4',
@@ -41,14 +46,15 @@ parser.add_argument('--gmm_n_components', type=int, default=25,
 
 def main():
     args = parser.parse_args()
+    cfg = Config.fromfile(args.config_file)
 
     # setting of save_folder
     if not os.path.exists(args.save_folder):
         os.makedirs(args.save_folder)
     
-    dataset = SocialProfilePictures(root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets', split=['train','val','test'],
-                    transform=transforms.Compose([  PadToSquare(), 
-                                                    transforms.Resize([224, 224]), 
+    dataset = SocialProfilePictures(version=cfg.dataset.version, root=args.dataset_folder, split=['train','val','test'],
+                    transform=transforms.Compose([  
+                                                    transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
                                                     transforms.ToTensor()]))
 
     if not (os.path.isfile("{}/features.npy".format(args.features_folder)) 

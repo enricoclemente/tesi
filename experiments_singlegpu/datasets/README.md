@@ -1,69 +1,73 @@
-# Custom Datasets
+# Datasets
 
-This guide explain the main structure of custom datasets classes. Since every dataset has its features, go to the comments of the relative class to understand better.
+This folder contains all the dataset classes implementations, utils functions, statistics made on them and so on.
+Since every dataset has its own features, go to the comments of the relative class to understand better.
 
-## Parameters
+## Custom Datasets
 
+### Parameters
 
-## Standard attributes
+### Standard attributes
+
 Every dataset has the following attributes
+
 - classes = list of class names (strings)
 - classes_map = map of classes with relative indices {'class name': index }
 - classes_count = map of classes with relative number of images {'class name': # of images }
-- targets = list of integer where for every image in the dataset it says its class; often ints since you will use classifier to predict a number for the relative class.
+- targets = list of integers where for every image in the dataset it says its class index (see classes_map to know mapping between class_name and index)
 - metadata = list of maps with the following keys
-    - split
-    - img_name
-    - img_folder
-    - target
+  - split
+  - img_name
+  - img_folder
+  - target
 
-
-# Final Dataset (SocialProfilePictures) 
-
+##  Final Dataset (SocialProfilePictures)
 
 ### Classes hierarchy
 
 The structure is:
+
 - level0
-    - level1
-        - level2
-            - level3
-For every level0 the deepest sub level is the "last level"
+  - level1
+    - level2
+      - level3
+For every level0 category, the deepest sub level is the "last level"
 
 Classes are:
-- people 
-    - selfie
-    - nonselfie
-- scenes
-    - indoor
-        - sun397 level2 
-            - sun397 level3
-    - outdoor_natural
-        - sun397 level2 
-            - sun397 level3
-    - outdoor_man-made
-        - sun397 level2 
-            - sun397 level3 
-- other
-    - pets
-        - cat
-            - 12 cats species
-        - dog
-            - 37 dogs species
-    - cartoon
-        - 100 famous people names
-    - art
-        - drawings
-        - engraving
-        - iconography
-        - painting
-        - sculpture
 
-### CSV: Images 
+- people
+  - selfie
+  - nonselfie
+- scenes
+  - indoor
+    - sun397 level2
+      - sun397 level3
+  - outdoor_natural
+    - sun397 level2
+      - sun397 level3
+  - outdoor_man-made
+    - sun397 level2
+      - sun397 level3
+- other
+  - pets
+    - cat
+      - 12 cats species
+    - dog
+      - 37 dogs species
+  - cartoon
+  - art
+    - drawings
+    - engraving
+    - iconography
+    - painting
+    - sculpture
+
+### CSV: Images
 
 It contains all the metada of the images that will present in the dataset
 
 Fields:
+
 - original_dataset: name of the original dataset
 - img_folder: path to the image folder
 - img_name: name of the image file
@@ -72,13 +76,14 @@ Fields:
 - level1: level1 class
 - level2: level2 class
 - level3: level3 class
-- last_level: since not every class have the same deep of hierarchy, in order to train the classifier with the deepest class level this field indicates which is
+- target_level: the level chosen to be used for that kind of image; this will be used for evaluation
 
 ### CSV: Classes
 
 It contains the hierarchy of different classes as explained below, their mapping into ids and their statistics
 
 Fields:
+
 - level0
 - level0_id: level0 class id
 - level1

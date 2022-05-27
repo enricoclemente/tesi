@@ -47,20 +47,10 @@ parser.add_argument('--model_path', type=str, default=None,
                     help='The pretrained model path')
 parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
                     help='path to results')
-parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/moco/logs',
-                    help='path to tensorboard logs')
 
 parser.add_argument('--batch-size', default=512, type=int,
                     help='Number of images in each mini-batch')
 
-# linear regression params
-parser.add_argument('--lr', '--learning-rate', default=0.015, type=float,
-                    metavar='LR', help='initial learning rate', dest='lr')                   
-parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
-                    metavar='W', help='weight decay (default: 1e-4)',
-                    dest='weight_decay')
-parser.add_argument('--epochs', default=100, type=int,
-                    help='Number of sweeps over the dataset to train')
 
 
 def main():  
@@ -72,9 +62,6 @@ def main():
     # setting of save_folder
     if not os.path.exists(args.save_folder):
         os.makedirs(args.save_folder)
-    # setting of logs_folder
-    if not os.path.exists(args.logs_folder):
-        os.makedirs(args.logs_folder)
 
     # checking GPU and showing infos
     if not torch.cuda.is_available():
@@ -244,14 +231,14 @@ def train_test_lda(split, model, dataset, features, targets, indices, confusion_
             total_false_negatives[predictions[i]] += 1
 
     for i, c_i in enumerate(dataset.classes):
-        total_false_positives_weighted[i] = total_false_positives[i] / (dataset.classes_count[c_i]/len(dataset))
-        total_false_negatives_weighted[i] = total_false_negatives[i] / (dataset.classes_count[c_i]/len(dataset))
+        total_false_positives_weighted[i] = round(total_false_positives[i] / dataset.classes_count[c_i] * 100, 2)
+        total_false_negatives_weighted[i] = round(total_false_negatives[i] / dataset.classes_count[c_i] * 100, 2)
         plot_bar_chart(dataset.classes, false_positives_per_class[i], "{} false positives over classes".format(c_i), "score", false_positives_save_folder)
         plot_bar_chart(dataset.classes, false_negatives_per_class[i], "{} false negatives over classes".format(c_i), "score", false_negatives_save_folder)
         
         for j, c_j in enumerate(dataset.classes):
-            false_positives_per_class_weighted[i][j] = false_positives_per_class[i][j] / (dataset.classes_count[c_j]/len(dataset))
-            false_negatives_per_class_weighted[i][j] = false_negatives_per_class[i][j] / (dataset.classes_count[c_j]/len(dataset))
+            false_positives_per_class_weighted[i][j] = round(false_positives_per_class[i][j] / dataset.classes_count[c_j] * 100, 2)
+            false_negatives_per_class_weighted[i][j] = round(false_negatives_per_class[i][j] / dataset.classes_count[c_j] * 100, 2)
         plot_bar_chart(dataset.classes, false_positives_per_class_weighted[i], "{} false positives over classes weighted".format(c_i), "score", false_positives_save_folder)
         plot_bar_chart(dataset.classes, false_negatives_per_class_weighted[i], "{} false negatives over classes weighted".format(c_i), "score", false_negatives_save_folder)
         

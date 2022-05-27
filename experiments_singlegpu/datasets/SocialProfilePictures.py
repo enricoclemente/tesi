@@ -31,7 +31,7 @@ class SocialProfilePictures(Dataset):
                             |-Selfie-Image-Detection-Dataset
                             |-SUN397
                             |-SocialProfilePictures ()
-        split (string or list): possible options: 'train', 'test', 
+        split (string or list): possible options: 'train', 'val', 'test'
             if list of multiple splits they will be treated as unique split
         split_perc (float): in order to custom the dataset you can choose the split percentage
         transform (callable, optional): A function/transform that  takes in an PIL image 
@@ -41,6 +41,7 @@ class SocialProfilePictures(Dataset):
         aspect_ratio_threshold (float): use it to filter images that have a greater aspect ratio
         dim_threshold (float): use it to filter images which area is 
             lower of = dim_threshold * dim_threshold * 1/aspect_ratio_threshold
+        version (int): indicates which version of the dataset to use 
     Attributes:
         - metadata
         - targets
@@ -50,7 +51,7 @@ class SocialProfilePictures(Dataset):
     """
     def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8,
                 transform: Optional[Callable] = None, partition_perc: float = 1.0,
-                aspect_ratio_threshold: float = None, dim_threshold: int = None):
+                aspect_ratio_threshold: float = None, dim_threshold: int = None, version=1):
         self.root = root
 
         if isinstance(split, list):
@@ -75,6 +76,9 @@ class SocialProfilePictures(Dataset):
         else: 
             self.area_threshold = None
         
+
+        self.version = "version_0"+str(version) if version < 10 else "version_"+str(version)
+
         self.metadata, self.targets, self.classes_map, self.classes_count = self._read_metadata()
         self.classes = list(self.classes_map.keys())
         
@@ -94,14 +98,14 @@ class SocialProfilePictures(Dataset):
         classes_splitter = {}
 
         # calculating statistics
-        with open(os.path.join(self.root, 'SocialProfilePictures', 'data', 'images_metadata.csv')) as file:
+        with open(os.path.join(self.root, 'SocialProfilePictures', 'data', self.version, 'images_metadata.csv')) as file:
             csv_reader = csv.reader(file, delimiter=',')
             line_count = 0
 
             class_index = 0
             for row in csv_reader:
                 if line_count == 0:
-                    # ignore columns
+                    # ignore header
                     line_count += 1
                 else:
                     if row[8] not in classes_map:
@@ -119,7 +123,7 @@ class SocialProfilePictures(Dataset):
         # print(classes_count)
         # print(classes_splitter)
 
-        with open(os.path.join(self.root, 'SocialProfilePictures', 'data', 'images_metadata.csv')) as file:
+        with open(os.path.join(self.root, 'SocialProfilePictures', 'data', self.version, 'images_metadata.csv')) as file:
             csv_reader = csv.reader(file, delimiter=',')
             line_count = 0
 
@@ -146,7 +150,7 @@ class SocialProfilePictures(Dataset):
                     if take_img == True:
                         meta['img_name'] = row[2]
                         meta['img_folder'] = os.path.join(row[0], 'data', row[1])
-                        meta['target'] = {'level1': row[5], 'level2': row[6], 'level3': row[7], 'target_level': row[8]}
+                        meta['target'] = {'level0': row[4], 'level1': row[5], 'level2': row[6], 'level3': row[7], 'target_level': row[8]}
                         targets.append(classes_map[row[8]])
                         metadata.append(meta)
                         classes_split_count[row[8]] += 1

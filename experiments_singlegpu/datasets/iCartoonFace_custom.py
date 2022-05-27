@@ -20,11 +20,10 @@ from PIL import Image
     Labels are...
 
     Statistics: 
-        78619 images
-        {'selfie': 46836, 'nonselfie': 31783}
-        image with smallest height: Test_data/Selfie/Selfie44658.jpg W=306 H=306
-        image with smallest width: Test_data/Selfie/Selfie44658.jpg W=306 H=306
-    
+        22500 images
+        with the smallest H: personai_icartoonface_rectest/icartoonface_rectest/personai_icartoonface_rectest_0006011.jpg W= 105 H= 101 
+        with the smallest W: personai_icartoonface_rectest/icartoonface_rectest/personai_icartoonface_rectest_0014712.jpg W= 101 H= 108
+
 """
 class iCartoonFace(Dataset):
     """

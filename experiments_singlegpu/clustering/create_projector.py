@@ -32,7 +32,7 @@ parser.add_argument('--dataset', default="cifar10", type=str,
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
 parser.add_argument('--model_path', default=None, type=str, metavar='PATH',
-                    help='path to previously trained model')
+                    help='path to previously trained model, if not set and dataset is SPP, it will be used ResNet18 pretrained on ImageNet')
 parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/moco/logs',
                     help='path to tensorboard logs')
 parser.add_argument('--batch-size', default=128, type=int,
@@ -47,7 +47,6 @@ def main():
     print(args)
     cfg = Config.fromfile(args.config_file)
 
-
     # setting of logs_folder
     if not os.path.exists(args.logs_folder):
         os.makedirs(args.logs_folder)
@@ -60,28 +59,31 @@ def main():
     torch.cuda.set_device(torch.cuda.current_device())
 
     model = None
-    test_dataset = None
-    test_dataset_sprites = None
+    dataset = None
+    dataset_sprites = None
 
     dataset_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)
     if args.dataset == 'cifar10':
         # creating model MoCo using resnet18_cifar which is an implementation adapted for CIFAR10
         model = resnet18_cifar()
 
-        test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
+        dataset = CIFAR10(root=args.dataset_folder, train=False, 
                 transform=transforms.Compose([transforms.ToTensor()]),  
                 download=True)
     elif args.dataset == 'socialprofilepictures':
         model = resnet18(pretrained=True if not args.model_path else False)
 
-        test_dataset = SocialProfilePictures(root=args.dataset_folder, split=['test'], 
+        dataset = SocialProfilePictures(version=cfg.dataset.version, root=args.dataset_folder, split='val', 
                 transform=transforms.Compose([ PadToSquare(),
-                                                transforms.Resize([224, 224]), 
+                                                transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
                                                 transforms.ToTensor()]))
-        test_dataset_sprites = SocialProfilePictures(root=args.dataset_folder, split=['test'], 
+        dataset_sprites = SocialProfilePictures(version=cfg.dataset.version, root=args.dataset_folder, split='val', 
                 transform=transforms.Compose([ PadToSquare(), 
                                                 transforms.Resize([64, 64]), 
                                                 transforms.ToTensor()]))
+        print("Dataset is big: {} images".format(len(dataset)))
+        print("Classes distribution: {}".format(dataset.classes_count))
+        exit()
     else:
         raise NotImplementedError("Choose a valid dataset!")
 
@@ -112,9 +114,9 @@ def main():
     cudnn.benchmark = True  # A bool that, if True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest.
 
     # tensorboard plotter
-    test_writer = SummaryWriter(args.logs_folder + "/test_projector")
+    test_writer = SummaryWriter(args.logs_folder + "/validation_set")
 
-    create_projector(model, test_dataset, test_dataset_sprites, test_writer, 'layer_4', args)
+    create_projector(model, dataset, dataset_sprites, test_writer, 'layer_4', args)
 
     
 def create_projector(model, dataset, dataset_sprites, writer, layer_name, args):
