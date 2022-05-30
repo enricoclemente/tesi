@@ -73,28 +73,26 @@ def main():
     elif args.dataset == 'socialprofilepictures':
         model = resnet18(pretrained=True if not args.model_path else False)
 
-        dataset = SocialProfilePictures(version=cfg.dataset.version, root=args.dataset_folder, split='val', 
-                transform=transforms.Compose([ PadToSquare(),
-                                                transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
+        dataset = SocialProfilePictures(version=cfg.dataset.version, root=args.dataset_folder, split='val', randomize_metadata=cfg.dataset.randomize_metadata,
+                transform=transforms.Compose([ transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
                                                 transforms.ToTensor()]))
-        dataset_sprites = SocialProfilePictures(version=cfg.dataset.version, root=args.dataset_folder, split='val', 
+        dataset_sprites = SocialProfilePictures(version=cfg.dataset.version, root=args.dataset_folder, split='val', randomize_metadata=cfg.dataset.shuffle_imgs,
                 transform=transforms.Compose([ PadToSquare(), 
                                                 transforms.Resize([64, 64]), 
                                                 transforms.ToTensor()]))
         print("Dataset is big: {} images".format(len(dataset)))
         print("Classes distribution: {}".format(dataset.classes_count))
-        exit()
+
     else:
         raise NotImplementedError("Choose a valid dataset!")
 
-    # optionally resume from a checkpoint
+    # optionally resume from a moco checkpoint
     if args.model_path:
         if os.path.isfile(args.model_path):
             print("=> loading model parameters '{}'".format(args.model_path))
             # Map model to be loaded to specified single gpu.
             loc = 'cuda:{}'.format(torch.cuda.current_device())
             checkpoint = torch.load(args.model_path, map_location=loc)
-            prev_parameteres = model.parameters()
             state_dict = dict()
             for key in checkpoint['state_dict']:
                 print(key)

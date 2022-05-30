@@ -42,7 +42,7 @@ from torch.utils.data import DataLoader
 from experiments_singlegpu.datasets.utils.analysis import calculate_EMOTIC_people_perc_from_SPP
 from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_people_perc_from_SPP
 from experiments_singlegpu.datasets.utils.analysis import calculate_SUN397_people_perc_from_SPP
-from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_false_positives_for_hierarchy_classes
+from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_false_positives_for_hierarchy_classes, calculate_scenes_false_positives_for_hierarchy_classes_v3
 from experiments_singlegpu.datasets.utils.analysis import calculate_people_false_positives_for_hierarchy_classes
 
 
@@ -50,11 +50,25 @@ from experiments_singlegpu.datasets.utils.analysis import calculate_people_false
 
 def main():  
     print("Ciao")
+    calculate_scenes_false_positives_for_hierarchy_classes_v3(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets/EMOTIC/data',
+                                                save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_nonselfie_vs_scenes/',
+                                                wrong_predictions_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/lda/resnet18_pretrained/exp1/train_false_positives')
+
+
+def test_SPP_randomize():
     dataset = SocialProfilePictures(version=3, root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
-                                    split='val')
+                                    split='val', randomize_metadata=False)
     print("Dataset is big: {}".format(len(dataset)))
     print(dataset.classes_count)
-    # print(dataset.metadata)
+    selfie = 0
+    nonselfie = 0
+    for img in dataset.metadata:
+        if img['target']['level2'] == 'selfie':
+            selfie += 1
+        elif img['target']['level2'] == 'nonselfie':
+            nonselfie += 1
+    print(selfie)
+    print(nonselfie)
 
 def test_SPP_v2():
     dataset = SocialProfilePictures(version=3, root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets')

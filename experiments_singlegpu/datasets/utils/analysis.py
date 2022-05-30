@@ -1012,3 +1012,104 @@ def calculate_people_false_positives_for_hierarchy_classes(dataset_folder, save_
     print(wrong_predictions_level_0)
     print(wrong_predictions_selfie_level_1)
     print(wrong_predictions_nonselfie_level_1)
+
+
+def calculate_scenes_false_positives_for_hierarchy_classes_v3(dataset_folder, save_folder, wrong_predictions_folder):
+    scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
+                    "transportation", "sports_and_leisure", "cultural",
+                    "water_ice_snow", "mountains_hills_desert_sky",
+                    "forest_field_jungle", "man-made_elements",
+                    "transportation", "cultural_or_historical_building_place",
+                    "sportsfields_parks_leisure_spaces", "industrial_and_construction",
+                    "houses_cabins_gardens_and_farms", "commercial_buildings"]
+
+    wrong_predictions_level_0 = { 'people': 0, 'scenes': 0, 'other': 0}
+    wrong_predictions_level_1 = {'people': 0, 'scenes': 0, 'pet': 0, 'cartoon': 0, 'art': 0}
+    for scene in scenes:
+        with open("{}/{}_false_positives.txt".format(wrong_predictions_folder, scene), "r") as f:
+            lines = f.readlines()
+
+            for i, line in enumerate(lines):
+                if i > 0:
+                    img_path = line.split(":")[1].split(",")[0].replace("'","").strip()
+                    wrong_prediction = line.split("wrong_prediction")[1]
+                    if "people" in wrong_prediction:
+                        wrong_predictions_level_0['people'] += 1
+                        wrong_predictions_level_1['people'] +=1          
+                    elif ('cat' in wrong_prediction or 'dog' in wrong_prediction or 'cartoon' in wrong_prediction 
+                        or 'drawings' in wrong_prediction or 'engraving' in wrong_prediction or 
+                        'iconography' in wrong_prediction or 'painting' in wrong_prediction or 'sculpture' in wrong_prediction):
+                        wrong_predictions_level_0['other'] += 1
+                        if 'cat' in wrong_prediction or 'dog' in wrong_prediction:
+                            wrong_predictions_level_1['pet'] += 1
+                        elif 'cartoon' in wrong_prediction:
+                            wrong_predictions_level_1['cartoon'] += 1
+                        else:
+                            wrong_predictions_level_1['art'] += 1
+                    else:
+                        wrong_predictions_level_0['scenes'] += 1
+                        wrong_predictions_level_1['scenes'] += 1
+    print(wrong_predictions_level_0)
+    print(wrong_predictions_level_1)
+
+def calculate_people_false_positives_for_hierarchy_classes(dataset_folder, save_folder, wrong_predictions_folder):
+
+    scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
+                    "transportation", "sports_and_leisure", "cultural",
+                    "water_ice_snow", "mountains_hills_desert_sky",
+                    "forest_field_jungle", "man-made_elements",
+                    "transportation", "cultural_or_historical_building_place",
+                    "sportsfields_parks_leisure_spaces", "industrial_and_construction",
+                    "houses_cabins_gardens_and_farms", "commercial_buildings"]
+    
+    wrong_predictions_level_0 = { 'people': 0, 'scenes': 0, 'other': 0}
+    wrong_predictions_selfie_level_1 = {'selfie': 0, 'nonselfie': 0, 'scenes': 0, 'pet': 0, 'cartoon': 0, 'art': 0}
+    wrong_predictions_nonselfie_level_1 = {'selfie': 0, 'nonselfie': 0, 'scenes': 0, 'pet': 0, 'cartoon': 0, 'art': 0}
+    with open("{}/selfie_false_positives.txt".format(wrong_predictions_folder), "r") as f:
+        lines = f.readlines()
+
+        for i, line in enumerate(lines):
+            if i > 0:
+                wrong_prediction = line.split("wrong_prediction")[1]
+                if "nonselfie" in wrong_prediction:
+                    wrong_predictions_level_0['people'] += 1
+                    wrong_predictions_selfie_level_1['nonselfie'] +=1       
+                elif ('cat' in wrong_prediction or 'dog' in wrong_prediction or 'cartoon' in wrong_prediction 
+                    or 'drawings' in wrong_prediction or 'engraving' in wrong_prediction or 
+                    'iconography' in wrong_prediction or 'painting' in wrong_prediction or 'sculpture' in wrong_prediction):
+                    wrong_predictions_level_0['other'] += 1
+                    if 'cat' in wrong_prediction or 'dog' in wrong_prediction:
+                        wrong_predictions_selfie_level_1['pet'] += 1
+                    elif 'cartoon' in wrong_prediction:
+                        wrong_predictions_selfie_level_1['cartoon'] += 1
+                    else:
+                        wrong_predictions_selfie_level_1['art'] += 1
+                else:
+                    wrong_predictions_level_0['scenes'] += 1
+                    wrong_predictions_selfie_level_1['scenes'] += 1
+    
+    with open("{}/nonselfie_false_positives.txt".format(wrong_predictions_folder), "r") as f:
+        lines = f.readlines()
+
+        for i, line in enumerate(lines):
+            if i > 0:
+                wrong_prediction = line.split("wrong_prediction")[1]
+                if "selfie" in wrong_prediction:
+                    wrong_predictions_level_0['people'] += 1
+                    wrong_predictions_nonselfie_level_1['selfie'] +=1       
+                elif ('cat' in wrong_prediction or 'dog' in wrong_prediction or 'cartoon' in wrong_prediction 
+                    or 'drawings' in wrong_prediction or 'engraving' in wrong_prediction or 
+                    'iconography' in wrong_prediction or 'painting' in wrong_prediction or 'sculpture' in wrong_prediction):
+                    wrong_predictions_level_0['other'] += 1
+                    if 'cat' in wrong_prediction or 'dog' in wrong_prediction:
+                        wrong_predictions_nonselfie_level_1['pet'] += 1
+                    elif 'cartoon' in wrong_prediction:
+                        wrong_predictions_nonselfie_level_1['cartoon'] += 1
+                    else:
+                        wrong_predictions_nonselfie_level_1['art'] += 1
+                else:
+                    wrong_predictions_level_0['scenes'] += 1
+                    wrong_predictions_nonselfie_level_1['scenes'] += 1
+    print(wrong_predictions_level_0)
+    print(wrong_predictions_selfie_level_1)
+    print(wrong_predictions_nonselfie_level_1)

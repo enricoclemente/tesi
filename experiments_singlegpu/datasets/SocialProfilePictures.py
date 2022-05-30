@@ -56,7 +56,7 @@ class SocialProfilePictures(Dataset):
     """
     def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8,
                 transform: Optional[Callable] = None, partition_perc: float = 1.0,
-                aspect_ratio_threshold: float = None, dim_threshold: int = None, version: int = 1, shuffle_imgs: bool = False):
+                aspect_ratio_threshold: float = None, dim_threshold: int = None, version: int = 1, randomize_metadata: bool = False):
         self.root = root
 
         if isinstance(split, list):
@@ -82,7 +82,7 @@ class SocialProfilePictures(Dataset):
             self.area_threshold = None
         
         self.version = "version_0"+str(version) if version < 10 else "version_"+str(version)
-        self.shuffle_imgs = shuffle_imgs
+        self.randomize_metadata = randomize_metadata
 
         self.metadata, self.targets, self.classes_map, self.classes_count = self._read_metadata()
         self.classes = list(self.classes_map.keys())
@@ -137,7 +137,7 @@ class SocialProfilePictures(Dataset):
         # print(classes_count)
         # print(classes_splitter)
 
-        if self.shuffle_imgs:
+        if self.randomize_metadata:
             for class_name in classes_metadata.keys():
                 random.shuffle(classes_metadata[class_name])
 

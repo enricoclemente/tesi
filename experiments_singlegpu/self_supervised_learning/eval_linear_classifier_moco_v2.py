@@ -38,9 +38,7 @@ from sklearn.metrics import precision_recall_fscore_support
 
 parser = argparse.ArgumentParser(description='Evaluation for MoCo with Linear Classifier')
 parser.add_argument("--config_file", default="./experiments_config_example.py", metavar="FILE",
-                    help="path to config file (same used with moco training)", type=str)
-parser.add_argument('--dataset', default="cifar10", type=str,
-                    help="name of the dataset, this lead to different script choices") 
+                    help="path to config file (same used with moco training)", type=str) 
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
 parser.add_argument('--model_path', type=str, default=None,
@@ -75,7 +73,7 @@ def main():
     test_dataset = None
     dataset_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)
     
-    if args.dataset == 'cifar10':
+    if cfg.dataset.dataset_name == 'cifar10':
         # resnet18_cifar which is an implementation adapted for CIFAR10
         encoder = resnet18_cifar()
 
@@ -85,12 +83,12 @@ def main():
         test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
                         transform=transforms.Compose([transforms.ToTensor(), dataset_normalization]), download=True)
 
-    elif args.dataset == 'socialprofilepictures':
+    elif cfg.dataset.dataset_name == 'socialprofilepictures':
         # base resnet18 encoder since using images of the same size of ImageNet
         encoder = models.resnet18(pretrained=True if not args.model_path else False)
 
         # SPP train dataset 
-        train_dataset = SocialProfilePicturesPro(root=args.dataset_folder, split="train", 
+        train_dataset = SocialProfilePicturesPro(version=cfg.dataset.version, root=args.dataset_folder, split="train", randomize_metadata=cfg.dataset.randomize_metadata,
                                     transform=transforms.Compose([
                                                 transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]),
                                                 transforms.RandomResizedCrop(cfg.dataset.img_size),
@@ -99,7 +97,7 @@ def main():
                                                 dataset_normalization]))
 
         # SPP test dataset
-        test_dataset = SocialProfilePicturesPro(root=args.dataset_folder, split="test", 
+        test_dataset = SocialProfilePicturesPro(version=cfg.dataset.version, root=args.dataset_folder, split="test", randomize_metadata=cfg.dataset.randomize_metadata,
                                     transform=transforms.Compose([
                                                 transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
                                                 transforms.ToTensor(),
