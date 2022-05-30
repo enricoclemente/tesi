@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import os
+from click import version_option
 sys.path.insert(0, './')
 
 import torch
@@ -49,10 +50,23 @@ from experiments_singlegpu.datasets.utils.analysis import calculate_people_false
 
 def main():  
     print("Ciao")
+    dataset = SocialProfilePictures(version=3, root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
+                                    split='val')
+    print("Dataset is big: {}".format(len(dataset)))
+    print(dataset.classes_count)
+    # print(dataset.metadata)
 
+def test_SPP_v2():
+    dataset = SocialProfilePictures(version=3, root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets')
+    print()
+    print("Dataset is big: {}".format(len(dataset)))
+    print(dataset.classes_count)
+    print(dataset.metadata)
+
+def test_SUN397_v2():
     dataset = SUN397_v2(root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets/SUN397/data',
                         images_people_perc_metadata='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/analysis_people_vs_scenes/sun397/images_with_people_perc_SUN397.json', 
-                        split=['train', 'test'], distribute_images=True, distribute_level='level2')
+                        split=['train'], distribute_images=True, distribute_level='level2', partition_perc=0.2)
     print("Dataset is big: {}".format(len(dataset)))
     print(dataset.classes_count)
 

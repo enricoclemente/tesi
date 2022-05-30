@@ -1,11 +1,15 @@
 import os
 import csv
+import random
 
 import torch
 from torch.utils.data import Dataset
 from typing import Any, Callable, List, Optional, Union
 from PIL import Image
 
+
+# setting random seed in order to have always the same random order
+random.seed(22)
 
 """
     Social Profile Pictures Dataset
@@ -19,7 +23,7 @@ from PIL import Image
 """
 class SocialProfilePictures(Dataset):
     """
-    Selfie-Image-Detection-Dataset Dataset
+    Social Profile Pictures Dataset
 
     Args: 
         root (string): Root directory where various dataset are downloaded
@@ -37,11 +41,12 @@ class SocialProfilePictures(Dataset):
         transform (callable, optional): A function/transform that  takes in an PIL image 
             and returns a transformed version. E.g, ``transforms.ToTensor``
         partition_perc (float): use it to take only a part of the dataset, keeping the proportion of number of images per classes
-            split_perc will work as well splitting the partion
+            split_perc will work as well splitting the partion 
         aspect_ratio_threshold (float): use it to filter images that have a greater aspect ratio
         dim_threshold (float): use it to filter images which area is 
             lower of = dim_threshold * dim_threshold * 1/aspect_ratio_threshold
         version (int): indicates which version of the dataset to use 
+        shuffle_imgs (bool): if true shuffle images per class in order to have subclasses randomization in different dataset splits
     Attributes:
         - metadata
         - targets
@@ -51,7 +56,7 @@ class SocialProfilePictures(Dataset):
     """
     def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8,
                 transform: Optional[Callable] = None, partition_perc: float = 1.0,
-                aspect_ratio_threshold: float = None, dim_threshold: int = None, version=1):
+                aspect_ratio_threshold: float = None, dim_threshold: int = None, version: int = 1, shuffle_imgs: bool = False):
         self.root = root
 
         if isinstance(split, list):
@@ -64,7 +69,7 @@ class SocialProfilePictures(Dataset):
 
         self.transform = transform
 
-        self.partition_perc = partition_perc
+        self.partition_perc = partition_perc # TODO the partition in this dataset is not implemented
 
         if aspect_ratio_threshold is not None:
             self.aspect_ratio_threshold = aspect_ratio_threshold
@@ -76,8 +81,8 @@ class SocialProfilePictures(Dataset):
         else: 
             self.area_threshold = None
         
-
         self.version = "version_0"+str(version) if version < 10 else "version_"+str(version)
+        self.shuffle_imgs = shuffle_imgs
 
         self.metadata, self.targets, self.classes_map, self.classes_count = self._read_metadata()
         self.classes = list(self.classes_map.keys())
@@ -92,10 +97,11 @@ class SocialProfilePictures(Dataset):
 
         # mapping only target levels, other level info will be added in metadata
         classes_map = {}
+        classes_metadata = {}
         classes_count = {}
-        classes_split_count = {}
+        classes_split_counter = {}
 
-        classes_splitter = {}
+        classes_counter = {}
 
         # calculating statistics
         with open(os.path.join(self.root, 'SocialProfilePictures', 'data', self.version, 'images_metadata.csv')) as file:
@@ -103,19 +109,27 @@ class SocialProfilePictures(Dataset):
             line_count = 0
 
             class_index = 0
+            
             for row in csv_reader:
                 if line_count == 0:
                     # ignore header
                     line_count += 1
                 else:
+                    meta = {}
                     if row[8] not in classes_map:
                         classes_map[row[8]] = class_index
+                        classes_metadata[row[8]] = []
                         class_index += 1
                         classes_count[row[8]] = 1
-                        classes_splitter[row[8]] = 0
-                        classes_split_count[row[8]] = 0
+                        classes_counter[row[8]] = 0
+                        classes_split_counter[row[8]] = 0
                     else: 
                         classes_count[row[8]] += 1
+                        
+                    meta['img_name'] = row[2]
+                    meta['img_folder'] = os.path.join(row[0], 'data', row[1])
+                    meta['target'] = {'level0': row[4], 'level1': row[5], 'level2': row[6], 'level3': row[7], 'target_level': row[8]}
+                    classes_metadata[row[8]].append(meta)
                     line_count += 1
             # print(line_count)
             
@@ -123,41 +137,34 @@ class SocialProfilePictures(Dataset):
         # print(classes_count)
         # print(classes_splitter)
 
-        with open(os.path.join(self.root, 'SocialProfilePictures', 'data', self.version, 'images_metadata.csv')) as file:
-            csv_reader = csv.reader(file, delimiter=',')
-            line_count = 0
+        if self.shuffle_imgs:
+            for class_name in classes_metadata.keys():
+                random.shuffle(classes_metadata[class_name])
 
-            for row in csv_reader:
-                if line_count == 0:
-                    # ignore columns
-                    line_count += 1
-                else:
-                    meta = {}
-                    take_img = False
-                    if "train" in self.split:
-                        if classes_splitter[row[8]] < int(classes_count[row[8]] * self.split_perc):
-                            meta['split'] = 'train'
-                            take_img = True
-                    if "val" in self.split:
-                        if (classes_splitter[row[8]] >= int(classes_count[row[8]] * self.split_perc) and 
-                            classes_splitter[row[8]] < int(classes_count[row[8]] * self.split_perc + classes_count[row[8]] * (1.0 - self.split_perc)/2)):
-                            meta['split'] = 'val'
-                            take_img = True
-                    if "test" in self.split:
-                        if (classes_splitter[row[8]] >= int(classes_count[row[8]] * self.split_perc + classes_count[row[8]] * (1.0 - self.split_perc)/2)):
-                            meta['split'] = 'test'
-                            take_img = True
-                    if take_img == True:
-                        meta['img_name'] = row[2]
-                        meta['img_folder'] = os.path.join(row[0], 'data', row[1])
-                        meta['target'] = {'level0': row[4], 'level1': row[5], 'level2': row[6], 'level3': row[7], 'target_level': row[8]}
-                        targets.append(classes_map[row[8]])
-                        metadata.append(meta)
-                        classes_split_count[row[8]] += 1
-                    
-                    classes_splitter[row[8]] += 1
+        for class_name in classes_metadata.keys():
+            for meta in classes_metadata[class_name]:
+                take_img = False
+                if "train" in self.split:
+                    if classes_counter[class_name] < int(classes_count[class_name] * self.split_perc):
+                        meta['split'] = 'train'
+                        take_img = True
+                if "val" in self.split:
+                    if (classes_counter[class_name] >= int(classes_count[class_name] * self.split_perc) and 
+                        classes_counter[class_name] < int(classes_count[class_name] * self.split_perc + classes_count[class_name] * (1.0 - self.split_perc)/2)):
+                        meta['split'] = 'val'
+                        take_img = True
+                if "test" in self.split:
+                    if (classes_counter[class_name] >= int(classes_count[class_name] * self.split_perc + classes_count[class_name] * (1.0 - self.split_perc)/2)):
+                        meta['split'] = 'test'
+                        take_img = True
+                if take_img == True:
+                    targets.append(classes_map[class_name])
+                    metadata.append(meta)
+                    classes_split_counter[class_name] += 1
+            
+                classes_counter[class_name] += 1
 
-        return metadata, targets, classes_map, classes_split_count
+        return metadata, targets, classes_map, classes_split_counter
 
 
     def __len__(self):
@@ -230,11 +237,4 @@ class SocialProfilePicturesPair(SocialProfilePictures):
                 augmentation_2 = self.transform(img)
         
         return augmentation_1, augmentation_2
-
-
-
-
-
-    
-    
 

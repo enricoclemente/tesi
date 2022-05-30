@@ -12,3 +12,4 @@ prova.py
 *.out
 features.npy
 targets.npy
+*.pt

@@ -32,31 +32,36 @@ from experiments_singlegpu.datasets.EMOTIC_custom import EMOTIC, EMOTIC_v2
 parser = argparse.ArgumentParser(description='SPP metadata generator')
 parser.add_argument("--datasets_root_folder", default="/datasets/", metavar="FILE",
                     help="path to save metadata", type=str)
-parser.add_argument("--save_folder", default="./dataset/metadata", metavar="FILE",
+parser.add_argument("--save_folder", default="./SPP_metadata", metavar="FILE",
                     help="path to save metadata", type=str)
 parser.add_argument("--version", default=1, type=int,
                     help='which version of the dataset')
+parser.add_argument("--only_stats", default=False, type=bool,
+                    help="choose this if you want only dataset statistics and not generation of metadata")
 
 def main():
     args = parser.parse_args()
+    
     if not os.path.isdir(args.save_folder):
-        os.mkdir(args.save_folder)
+        os.makedirs(args.save_folder)
 
     print("Creating final dataset metadata")
-    if args.version == 1:
-        # TODO add datasets_root to this function
-        total_images = 60000
-        create_images_csv_version_01(csv_save_path=args.save_folder)
-    elif args.version == 2:
-        total_images = 60000
-        create_images_csv_version_02(datasets_root_folder=args.datasets_root_folder, 
-                                    csv_save_path=args.save_folder,
-                                    save_folder=args.save_folder)
-    elif args.version == 3:
-        total_images = 60000
-        create_images_csv_version_03(datasets_root_folder=args.datasets_root_folder,
-                                    csv_save_path=args.save_folder,
-                                    save_folder=args.save_folder)
+    if not args.only_stats:
+        if args.version == 1:
+            total_images = 60000
+            create_images_csv_version_01(csv_save_path=args.save_folder)
+        elif args.version == 2:
+            total_images = 60000
+            create_images_csv_version_02(datasets_root_folder=args.datasets_root_folder, 
+                                        csv_save_path=args.save_folder,
+                                        save_folder=args.save_folder)
+        elif args.version == 3:
+            total_images = 60000
+            create_images_csv_version_03(datasets_root_folder=args.datasets_root_folder,
+                                        csv_save_path=args.save_folder,
+                                        save_folder=args.save_folder)
+        else:
+            raise NotImplementedError("You must choose a valid version!")
 
     print("\nCalculating statistics of SocialProfilePictures")
     complete_dataset = SocialProfilePictures(version=args.version, root=args.datasets_root_folder, split=['train','test', 'val'])
@@ -170,7 +175,7 @@ def main():
 
     target_level_colors = []
     for key in complete_dataset.classes_count.keys():
-        if key == 'people':
+        if key == 'people' or key == 'selfie' or key == 'nonselfie':
             target_level_colors.append('blue')
         elif (key == 'cat' or key == 'dog' or key == 'cartoon' or
             key == 'engraving' or key == 'painting' or key == 'iconography' or key == 'sculpture' or  key == 'drawings'):
