@@ -43,17 +43,16 @@ from experiments_singlegpu.datasets.utils.analysis import calculate_EMOTIC_peopl
 from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_people_perc_from_SPP
 from experiments_singlegpu.datasets.utils.analysis import calculate_SUN397_people_perc_from_SPP
 from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_false_positives_for_hierarchy_classes, calculate_scenes_false_positives_for_hierarchy_classes_v3
-from experiments_singlegpu.datasets.utils.analysis import calculate_people_false_positives_for_hierarchy_classes
+from experiments_singlegpu.datasets.utils.analysis import calculate_people_false_positives_for_hierarchy_classes, calculate_people_false_positives_for_hierarchy_classes_v3
 
 
 
 
 def main():  
     print("Ciao")
-    calculate_scenes_false_positives_for_hierarchy_classes_v3(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets/EMOTIC/data',
-                                                save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_nonselfie_vs_scenes/',
-                                                wrong_predictions_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/lda/resnet18_pretrained/exp1/train_false_positives')
 
+    clustering_accuracy_studies()
+    
 
 def test_SPP_randomize():
     dataset = SocialProfilePictures(version=3, root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
@@ -358,10 +357,10 @@ def loading_resnet_pretrained_for_moco():
 
 
 def clustering_accuracy_studies():
-    y_pred = np.array([0,0,1,0,1])
-    y_true = np.array([0,0,0,1,1])
-    clustering_accuracy_spice(y_pred, y_true)
-    clustering_accuracy_n2d(y_pred, y_true)
+    y_pred = np.array([1,1,1,2,0,0,2,3,3])
+    y_true = np.array([0,0,0,1,1,1,1,1,1])
+    calculate_clustering_accuracy_expanded(y_pred, y_true, 4)
+    # clustering_accuracy_n2d(y_pred, y_true)
     # y_pred = np.array([1,1,1,0,0])
     # y_true = np.array([0,0,0,1,1])
     # spice = 1.0
@@ -387,6 +386,34 @@ def clustering_accuracy_studies():
     # spice = 0.6
     # n2d = 0.4
 
+def calculate_clustering_accuracy_expanded(y_pred, y_true, num_classes):
+
+    class_accuracy_total = np.zeros(num_classes)
+    class_accuracy_per_class = np.zeros(num_classes)
+
+    acc, cluster_labels_assigned, g_truth_labels_assigned = clustering_accuracy_spice(y_pred, y_true)
+
+    N = len(np.unique(y_pred))
+
+    s = np.unique(y_pred)
+    t = np.unique(y_true)
+
+    # calcolo il cluster migliore
+    count = 0
+    for i in range(N):
+        idx = np.logical_and(y_pred == s[cluster_labels_assigned[i]], y_true == t[g_truth_labels_assigned[i]])
+        class_accuracy_total[g_truth_labels_assigned[i]] = np.count_nonzero(idx) / len(y_true.tolist())
+        class_accuracy_per_class[g_truth_labels_assigned[i]] = np.count_nonzero(idx)/y_true.tolist().count(g_truth_labels_assigned[i])
+        
+        print("class: {} has accuracy: {}".format(g_truth_labels_assigned[i], np.count_nonzero(idx)/y_true.tolist().count(g_truth_labels_assigned[i])))
+        count += np.count_nonzero(idx) 
+    # print(count)
+    
+    f = lambda v: np.round(v, 2)
+    print(f(class_accuracy_total))
+    print(f(class_accuracy_per_class))
+    acc = 1.0 * count / len(y_true)
+    print("Accuracy: {}".format(acc))
 
 def clustering_accuracy_spice(y_pred, y_true):
     print("Cluster Accuracy SPICE")
@@ -399,13 +426,25 @@ def clustering_accuracy_spice(y_pred, y_true):
     # acc = calculate_acc(y_pred, y_true)
     s = np.unique(y_pred)
     t = np.unique(y_true)
+    print(t)
+    while(len(s) > len(t)):
+        t = np.concatenate((t, t))
+    
+    if len(s) != len(t):
+        print("num cluster must be multiple")
+        return
 
-    N = len(np.unique(y_pred))
+    N = len(s)
+    T = len(t)
     C = np.zeros((N, N), dtype=np.int32)
 
     for i in range(N):
-        for j in range(N):
-            idx = np.logical_and(y_pred == s[i], y_true == t[j])
+        for j in range(T):
+            idx = np.logical_and(y_pred == s[i], y_true == t[j// len(np.unique(y_true))])
+            print("For cluster {} and class {}".format(i, j// len(np.unique(y_true))))
+            print(y_pred == s[i])
+            print(y_true == t[j// len(np.unique(y_true))])
+            print(idx)
             C[i][j] = np.count_nonzero(idx)
     Cmax = np.amax(C)
     C = Cmax - C
@@ -416,9 +455,13 @@ def clustering_accuracy_spice(y_pred, y_true):
         The cost of the assignment can be computed as cost_matrix[row_ind, col_ind].sum(). 
     """
     row, col = linear_sum_assignment(C)
+    col_original = col
+    f = lambda v: v // len(np.unique(y_true))
+    col = f(col)
     print("Linear sum assignment results")
     print("Cluster label: {}".format(row))
     print("Relative best ground truth label: {}".format(col))
+    print("Relative best ground truth label (original): {}".format(col_original))
 
     # print(C[row,col].sum())
     
@@ -426,12 +469,14 @@ def clustering_accuracy_spice(y_pred, y_true):
     count = 0
     for i in range(N):
         idx = np.logical_and(y_pred == s[row[i]], y_true == t[col[i]])
+        print("class: {} has accuracy: {}".format(col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i%len(np.unique(y_true))])))
         count += np.count_nonzero(idx) 
     # print(count)
     
     acc = 1.0 * count / len(y_true)
     print("Accuracy: {}".format(acc))
 
+    return acc, row, col
     # mat = linear_sum_assignment(C)
     # print(mat)
 

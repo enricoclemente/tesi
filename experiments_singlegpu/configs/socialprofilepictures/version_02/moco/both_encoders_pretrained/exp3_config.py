@@ -1,6 +1,3 @@
-"""
-    config file for exp3, first experiment where to find if the queue of negative example size can affect the training with unbalanced dataset
-"""
 dataset = dict(
     version=2,
     randomize_metadata=False,

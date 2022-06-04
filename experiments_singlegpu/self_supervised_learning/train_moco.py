@@ -165,14 +165,14 @@ def main():
 
         # creating SPP train dataset 
         # which gave pair augmentation of image
-        pair_train_dataset = SocialProfilePicturesPair(root=args.dataset_folder, split="train", 
+        pair_train_dataset = SocialProfilePicturesPair(version=cfg.dataset.version, randomize_metadata=cfg.dataset.randomize_metadata, root=args.dataset_folder, split="train", 
                                     transform=transforms.Compose(
                                                 [PadToSquare() if cfg.dataset.train_padding else DoNothing(),    # apply padding to make images squared without
                                                 transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]) if cfg.dataset.train_resize else DoNothing()] +
                                                 mocov2_augmentation))
 
         # creating SPP datasets for knn test
-        validation_train_dataset = SocialProfilePictures(root=args.dataset_folder, split="train", 
+        validation_train_dataset = SocialProfilePictures(version=cfg.dataset.version, randomize_metadata=cfg.dataset.randomize_metadata, root=args.dataset_folder, split="train", 
                                     transform=transforms.Compose(
                                                 [PadToSquare() if cfg.dataset.test_padding else DoNothing(),    
                                                 transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]) if cfg.dataset.test_resize else DoNothing(),
@@ -180,7 +180,7 @@ def main():
                                                 transforms.RandomHorizontalFlip(),
                                                 transforms.ToTensor(),
                                                 dataset_normalization]))
-        validation_test_dataset = SocialProfilePictures(root=args.dataset_folder, split="val", 
+        validation_test_dataset = SocialProfilePictures(version=cfg.dataset.version, randomize_metadata=cfg.dataset.randomize_metadata, root=args.dataset_folder, split="val", 
                                     transform=transforms.Compose( 
                                                 [PadToSquare() if cfg.dataset.test_padding else DoNothing(),    
                                                 transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]) if cfg.dataset.test_resize else DoNothing(),
