@@ -97,7 +97,6 @@ parser.add_argument('--knn-k', default=200, type=int, help='k in kNN monitor')
 parser.add_argument('--knn-t', default=0.1, type=float, help='softmax temperature in kNN monitor; could be different with moco-t')
 
 
-
 def main():
     args = parser.parse_args()
     print("train moco started with params")

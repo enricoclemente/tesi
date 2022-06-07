@@ -1014,7 +1014,7 @@ def calculate_people_false_positives_for_hierarchy_classes(dataset_folder, save_
     print(wrong_predictions_nonselfie_level_1)
 
 
-def calculate_scenes_false_positives_for_hierarchy_classes_v3(dataset_folder, save_folder, wrong_predictions_folder):
+def calculate_scenes_false_positives_for_hierarchy_classes_v3(wrong_predictions_folder):
     scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
                     "transportation", "sports_and_leisure", "cultural",
                     "water_ice_snow", "mountains_hills_desert_sky",

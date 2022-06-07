@@ -44,14 +44,15 @@ from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_peopl
 from experiments_singlegpu.datasets.utils.analysis import calculate_SUN397_people_perc_from_SPP
 from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_false_positives_for_hierarchy_classes, calculate_scenes_false_positives_for_hierarchy_classes_v3
 from experiments_singlegpu.datasets.utils.analysis import calculate_people_false_positives_for_hierarchy_classes, calculate_people_false_positives_for_hierarchy_classes_v3
-
-
+from itertools import combinations_with_replacement
+import multiprocessing
+from joblib import Parallel, delayed
 
 
 def main():  
     print("Ciao")
 
-    clustering_accuracy_studies()
+    calculate_scenes_false_positives_for_hierarchy_classes_v3(wrong_predictions_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/lda/resnet18_pretrained/exp1/test_false_positives')
     
 
 def test_SPP_randomize():
@@ -359,7 +360,7 @@ def loading_resnet_pretrained_for_moco():
 def clustering_accuracy_studies():
     y_pred = np.array([1,1,1,2,0,0,2,3,3])
     y_true = np.array([0,0,0,1,1,1,1,1,1])
-    calculate_clustering_accuracy_expanded(y_pred, y_true, 4)
+    clustering_accuracy_spice_overcluster(y_pred, y_true)
     # clustering_accuracy_n2d(y_pred, y_true)
     # y_pred = np.array([1,1,1,0,0])
     # y_true = np.array([0,0,0,1,1])
@@ -426,24 +427,16 @@ def clustering_accuracy_spice(y_pred, y_true):
     # acc = calculate_acc(y_pred, y_true)
     s = np.unique(y_pred)
     t = np.unique(y_true)
-    print(t)
-    while(len(s) > len(t)):
-        t = np.concatenate((t, t))
-    
-    if len(s) != len(t):
-        print("num cluster must be multiple")
-        return
 
     N = len(s)
-    T = len(t)
     C = np.zeros((N, N), dtype=np.int32)
 
     for i in range(N):
-        for j in range(T):
-            idx = np.logical_and(y_pred == s[i], y_true == t[j// len(np.unique(y_true))])
-            print("For cluster {} and class {}".format(i, j// len(np.unique(y_true))))
+        for j in range(N):
+            idx = np.logical_and(y_pred == s[i], y_true == t[j])
+            print("For cluster {} and class {}".format(i, j))
             print(y_pred == s[i])
-            print(y_true == t[j// len(np.unique(y_true))])
+            print(y_true == t[j])
             print(idx)
             C[i][j] = np.count_nonzero(idx)
     Cmax = np.amax(C)
@@ -455,13 +448,10 @@ def clustering_accuracy_spice(y_pred, y_true):
         The cost of the assignment can be computed as cost_matrix[row_ind, col_ind].sum(). 
     """
     row, col = linear_sum_assignment(C)
-    col_original = col
-    f = lambda v: v // len(np.unique(y_true))
-    col = f(col)
+    
     print("Linear sum assignment results")
     print("Cluster label: {}".format(row))
     print("Relative best ground truth label: {}".format(col))
-    print("Relative best ground truth label (original): {}".format(col_original))
 
     # print(C[row,col].sum())
     
@@ -477,18 +467,217 @@ def clustering_accuracy_spice(y_pred, y_true):
     print("Accuracy: {}".format(acc))
 
     return acc, row, col
-    # mat = linear_sum_assignment(C)
-    # print(mat)
 
-    # C = np.zeros((N, N), dtype=np.int32)
+def clustering_accuracy_spice_overcluster(y_pred, y_true):
+    print("Cluster Accuracy SPICE with overcluster")
+    print("Cluster prediction: {}".format(y_pred))
+    print("Ground truth: {}".format(y_true))
 
-    # for i in range(N):
-    #     for j in range(N):
-    #         idx = np.logical_and(y_pred == s[i], y_true == t[j])
-    #         C[i][j] = np.count_nonzero(idx)
+    cluster_labels = np.unique(y_pred) #s
+    class_labels = np.unique(y_true) #t
+
+    if len(cluster_labels) > len(class_labels):
+        best_combination = {'acc': 0.0}
+
+        overcluster = len(cluster_labels) - len(class_labels)
+        class_extra_combinations = combinations_with_replacement(class_labels, overcluster)
+
+        for comb in class_extra_combinations:
+            class_combination = np.concatenate([class_labels, comb])
+            print("Class combination: ", class_combination)
+
+            # calculatin cost matrix for i-th combination
+            N = len(cluster_labels)
+            C = np.zeros((N, N), dtype=np.int32)
+
+            for i in range(N):
+                for j in range(N):
+                    idx = np.logical_and(y_pred == cluster_labels[i], y_true == class_combination[j])
+                    print("For cluster {} and class {}".format(i, j))
+                    print(y_pred == cluster_labels[i])
+                    print(y_true == class_combination[j])
+                    print(idx)
+                    C[i][j] = np.count_nonzero(idx)
+            Cmax = np.amax(C)
+            C = Cmax - C
+            print("Cost Matrix: \n{}".format(C))
+
+            row, col = linear_sum_assignment(C)
+
+            col_fake_assignement = col.copy()
+
+            for i, a in enumerate(col_fake_assignement):
+                col[i] = class_combination[a]
+            print("Linear sum assignment results")
+            print("Cluster label: {}".format(row))
+            print("Fake assigned ground truth label: {}".format(col_fake_assignement))
+            print("Real assigned ground truth label: {}".format(col))
+
+            count = 0
+            for i in range(N):
+                idx = np.logical_and(y_pred == cluster_labels[row[i]], y_true == class_combination[col[i]])
+                print("class: {} has accuracy: {}".format(col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i])))
+                count += np.count_nonzero(idx) 
     
-    # acc = sum([C[i, j] for i, j in mat]) * 1.0 / y_pred.size
-    # print(acc)
+            acc = 1.0 * count / len(y_true)
+            print("Accuracy: {}".format(acc))
+
+            if acc > best_combination["acc"]:
+                best_combination["acc"] = acc
+                best_combination['cluster_labels_assigned'] = row
+                best_combination['g_truth_labels_assigned'] = col
+        
+        print("Best combination is: ", best_combination)
+        return best_combination["acc"], best_combination["cluster_labels_assigned"], best_combination["g_truth_labels_assigned"]
+
+    elif len(cluster_labels) == len(class_labels):
+        N = len(cluster_labels)
+        C = np.zeros((N, N), dtype=np.int32)
+
+        for i in range(N):
+            for j in range(N):
+                idx = np.logical_and(y_pred == cluster_labels[i], y_true == class_labels[j])
+                print("For cluster {} and class {}".format(i, j))
+                print(y_pred == cluster_labels[i])
+                print(y_true == class_labels[j])
+                print(idx)
+                C[i][j] = np.count_nonzero(idx)
+        Cmax = np.amax(C)
+        C = Cmax - C
+        print("Cost Matrix: \n{}".format(C))
+
+        """
+            Return an array of row indices and one of corresponding column indices giving the optimal assignment. 
+            The cost of the assignment can be computed as cost_matrix[row_ind, col_ind].sum(). 
+        """
+        row, col = linear_sum_assignment(C)
+        
+        print("Linear sum assignment results")
+        print("Cluster label: {}".format(row))
+        print("Relative best ground truth label: {}".format(col))
+
+        # print(C[row,col].sum())
+        
+        # calcolo il cluster migliore
+        count = 0
+        for i in range(N):
+            idx = np.logical_and(y_pred == cluster_labels[row[i]], y_true == class_labels[col[i]])
+            print("class: {} has accuracy: {}".format(col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i%len(np.unique(y_true))])))
+            count += np.count_nonzero(idx) 
+        # print(count)
+        
+        acc = 1.0 * count / len(y_true)
+        print("Accuracy: {}".format(acc))
+
+        return acc, row, col
+    else:
+        return -1, [], []
+
+
+def clustering_accuracy_spice_overcluster_parallel(y_pred, y_true):
+    print("Cluster Accuracy SPICE with overcluster")
+    print("Cluster prediction: {}".format(y_pred))
+    print("Ground truth: {}".format(y_true))
+
+    cluster_labels = np.unique(y_pred) #s
+    class_labels = np.unique(y_true) #t
+
+    if len(cluster_labels) > len(class_labels):
+        best_combination = {'acc': 0.0}
+
+        overcluster = len(cluster_labels) - len(class_labels)
+        class_extra_combinations = combinations_with_replacement(class_labels, overcluster)
+
+        for comb in class_extra_combinations:
+            class_combination = np.concatenate([class_labels, comb])
+            print("Class combination: ", class_combination)
+
+            # calculatin cost matrix for i-th combination
+            N = len(cluster_labels)
+            C = np.zeros((N, N), dtype=np.int32)
+
+            for i in range(N):
+                for j in range(N):
+                    idx = np.logical_and(y_pred == cluster_labels[i], y_true == class_combination[j])
+                    print("For cluster {} and class {}".format(i, j))
+                    print(y_pred == cluster_labels[i])
+                    print(y_true == class_combination[j])
+                    print(idx)
+                    C[i][j] = np.count_nonzero(idx)
+            Cmax = np.amax(C)
+            C = Cmax - C
+            print("Cost Matrix: \n{}".format(C))
+
+            row, col = linear_sum_assignment(C)
+
+            col_fake_assignement = col.copy()
+
+            for i, a in enumerate(col_fake_assignement):
+                col[i] = class_combination[a]
+            print("Linear sum assignment results")
+            print("Cluster label: {}".format(row))
+            print("Fake assigned ground truth label: {}".format(col_fake_assignement))
+            print("Real assigned ground truth label: {}".format(col))
+
+            count = 0
+            for i in range(N):
+                idx = np.logical_and(y_pred == cluster_labels[row[i]], y_true == class_combination[col[i]])
+                print("class: {} has accuracy: {}".format(col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i])))
+                count += np.count_nonzero(idx) 
+    
+            acc = 1.0 * count / len(y_true)
+            print("Accuracy: {}".format(acc))
+
+            if acc > best_combination["acc"]:
+                best_combination["acc"] = acc
+                best_combination['cluster_labels_assigned'] = row
+                best_combination['g_truth_labels_assigned'] = col
+        
+        print("Best combination is: ", best_combination)
+        return best_combination["acc"], best_combination["cluster_labels_assigned"], best_combination["g_truth_labels_assigned"]
+
+    elif len(cluster_labels) == len(class_labels):
+        N = len(cluster_labels)
+        C = np.zeros((N, N), dtype=np.int32)
+
+        for i in range(N):
+            for j in range(N):
+                idx = np.logical_and(y_pred == cluster_labels[i], y_true == class_labels[j])
+                print("For cluster {} and class {}".format(i, j))
+                print(y_pred == cluster_labels[i])
+                print(y_true == class_labels[j])
+                print(idx)
+                C[i][j] = np.count_nonzero(idx)
+        Cmax = np.amax(C)
+        C = Cmax - C
+        print("Cost Matrix: \n{}".format(C))
+
+        """
+            Return an array of row indices and one of corresponding column indices giving the optimal assignment. 
+            The cost of the assignment can be computed as cost_matrix[row_ind, col_ind].sum(). 
+        """
+        row, col = linear_sum_assignment(C)
+        
+        print("Linear sum assignment results")
+        print("Cluster label: {}".format(row))
+        print("Relative best ground truth label: {}".format(col))
+
+        # print(C[row,col].sum())
+        
+        # calcolo il cluster migliore
+        count = 0
+        for i in range(N):
+            idx = np.logical_and(y_pred == cluster_labels[row[i]], y_true == class_labels[col[i]])
+            print("class: {} has accuracy: {}".format(col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i%len(np.unique(y_true))])))
+            count += np.count_nonzero(idx) 
+        # print(count)
+        
+        acc = 1.0 * count / len(y_true)
+        print("Accuracy: {}".format(acc))
+
+        return acc, row, col
+    else:
+        return -1, [], []
 
 def clustering_accuracy_n2d(y_pred, y_true):
     print("Cluster Accuracy N2D")
