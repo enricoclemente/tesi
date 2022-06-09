@@ -1,6 +1,7 @@
 import os
 import csv
 import json
+import shutil
 
 import torch
 from torch.utils.data import Dataset
@@ -13,6 +14,7 @@ from shapely.geometry import Polygon
 import math
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 
 
 class DatasetTriplet(Dataset):
@@ -1149,3 +1151,23 @@ def calculate_people_false_positives_for_hierarchy_classes_v3(dataset_folder, sa
     
     print(wrong_predictions_level_0)
     print(wrong_predictions_level_1)
+
+
+# extract examples of wrong predictions for every percentage and class
+def extract_examples(wrong_predictions_file, save_folder):
+    wrong_predictions = json.load(open(wrong_predictions_file, 'r'))
+
+    randomized_images = list(wrong_predictions.keys())
+    random.shuffle(randomized_images)
+    for p in randomized_images:
+        prediction_folder = os.path.join(save_folder, wrong_predictions[p]["wrong_prediction"])
+        perc_sub_folder = os.path.join(prediction_folder, str(wrong_predictions[p]["people_percentage"]))
+        if not os.path.exists(perc_sub_folder):
+            os.makedirs(os.path.join(perc_sub_folder))
+
+        if len(os.listdir(perc_sub_folder)) < 5:
+            img_path = os.path.join('/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets', p)
+            shutil.copy(img_path, perc_sub_folder)
+        
+
+

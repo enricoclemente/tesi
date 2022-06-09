@@ -34,14 +34,8 @@ parser.add_argument("--config_file", default="./experiments_config_example.py", 
                     help="path to config file (same used with moco training)", type=str)
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
-parser.add_argument('--model_path', type=str, default='./results/checkpoint_last.pth.tar',
-                    help='The pretrained model path')
 parser.add_argument('--save_folder', metavar='DIR', default='./results',
                     help='path to results')
-parser.add_argument('--features_layer', type=str, default='layer4',
-                    help='layer from which to extract features')
-parser.add_argument('--umap_n_epochs', type=int, default=1000,
-                    help='umap number of epochs to train')
 
 
 def main():
@@ -69,8 +63,9 @@ def main():
                                                     transforms.ToTensor()]))
 
     model = resnet18()
-    if not os.path.isfile(args.model_path):
+    if not os.path.isfile(cfg.model_path):
         # if not available a previously trained model on moco use pretrained one on Imagenet
+        print("Using pretrained model on ImageNet")
         model = resnet18(pretrained=True)
     else:
         model = resnet18(num_classes=128)
@@ -87,7 +82,7 @@ def main():
         model.load_state_dict(state_dict, strict=False)
     
     
-    if args.features_layer == 'layer4':
+    if cfg.features_layer == 'layer4':
         # removing fc layer 
         model = torch.nn.Sequential(*(list(model.children())[:-1]))
     
@@ -98,36 +93,39 @@ def main():
     model.cuda()
 
     print("Extracting train features")
-    train_features, train_targets = extract_features_targets(model, train_dataset, args)
+    train_features, train_targets = extract_features_targets(model, train_dataset, cfg)
 
     print("Extracting validation features")
-    val_features, val_targets = extract_features_targets(model, val_dataset, args)
+    val_features, val_targets = extract_features_targets(model, val_dataset, cfg)
 
     print("Extracting test features")
-    test_features, test_targets = extract_features_targets(model, test_dataset, args)
+    test_features, test_targets = extract_features_targets(model, test_dataset, cfg)
 
     """
         Following commented code to use only for tests
     """
-    # train_features = np.load('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/umap+gmm/resnet18_pretrained/exp_prova/features.npy')
-    # train_targets = np.load('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/umap+gmm/resnet18_pretrained/exp_prova/targets.npy')
+    # train_features = np.load('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/umap+gmm/exp_prova/features.npy')
+    # train_targets = np.load('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/umap+gmm/exp_prova/targets.npy')
     # test_features = train_features
     # val_features = test_features
     # test_targets = train_targets
     # val_targets = test_targets
 
-    best_scores = []
+    best_ext_scores = []
+    best_int_scores = []
 
     print("Calculating t-SNE")
     tsne_2d = TSNE(n_components=2).fit_transform(test_features)
+    plot_tSNE(test_dataset, tsne_2d, test_targets, args.save_folder)
 
     num_classes = len(train_dataset.classes)
-    n_clusters_values = [num_classes, 26, 28, 30]
+    n_clusters_values = np.arange(cfg.n_cluster_values.start, cfg.n_cluster_values.end+2,2)
     n_neighbors_values = [5, 10, 20, 50]
     min_dist_values = [0.0, 0.1, 0.25, 0.5]
     original_save_folder = "" + args.save_folder
     for n_clusters in n_clusters_values:
-        best_ami = {'ami': 0.0}
+        best_ext = {"ami": 0.0}
+        best_int = {"silhouette_avg": 0.0}
         
         args.save_folder = os.path.join(original_save_folder, "n_clusters_{}".format(n_clusters))
 
@@ -139,112 +137,128 @@ def main():
                 """
                     Compute UMAP
                 """
-                hyperparams_text = "n_neighbors_{}_min_dist_{}".format(n_neighbors, min_dist)
+                umap_n_components = num_classes if cfg.umap.fix_n_components else n_clusters
+                hyperparams_text = "umap_n_components_{}_n_neighbors_{}_min_dist_{}".format(umap_n_components, n_neighbors, min_dist)
                 
                 # calculating UMAP
                 print("Calculating UMAP with {}".format(hyperparams_text))
-                umap = cuml.UMAP(   n_neighbors=n_neighbors,
-                                    n_components=n_clusters,
+                umap = cuml.UMAP(   n_components=umap_n_components,
+                                    n_neighbors=n_neighbors,
                                     min_dist=min_dist,
-                                    n_epochs=args.umap_n_epochs
+                                    n_epochs=cfg.umap.n_epochs
                                 ).fit(train_features)
                 train_embedding = umap.transform(train_features)
                 val_embedding = umap.transform(val_features)
 
-                """
-                    Compute GMM starting from previously calculated embeddings with UMAP
-                """
-                print("Calculating GMM on UMAP embedding with {}".format(hyperparams_text))
-                gmm = GaussianMixture(n_components=n_clusters).fit(train_embedding)
-                val_predicted_cluster_labels = gmm.predict(val_embedding)
-                
-                nmi = normalized_mutual_info_score(val_predicted_cluster_labels, val_targets)
-                ami = adjusted_mutual_info_score(val_predicted_cluster_labels, val_targets)
-                ari = adjusted_rand_score(val_predicted_cluster_labels, val_targets)
-                silhouette_avg = silhouette_score(val_features, val_predicted_cluster_labels)
-                
-                print("Clustering with n_cluster={}, n_neighbors={}, min_dist={}".format(n_clusters, n_neighbors, min_dist))
-                print("\tNMI: {} AMI: {} ARI: {}".format(round(nmi, 3), round(ami, 3), round(ari, 3)))
-                print("\tsilhouette_score: {}".format(round(silhouette_avg, 3)))
+                # if in the embeddings there are NaN values GMM fails
+                if not (np.any(np.isnan(train_embedding)) or np.any(np.isnan(val_embedding))):
+                    """
+                        Compute GMM starting from previously calculated embeddings with UMAP
+                    """
+                    print("Calculating GMM on UMAP embedding with {}".format(hyperparams_text))
+                    gmm = GaussianMixture(n_components=n_clusters).fit(train_embedding)
+                    val_predicted_cluster_labels = gmm.predict(val_embedding)
+                    
+                    nmi = normalized_mutual_info_score(val_predicted_cluster_labels, val_targets)
+                    ami = adjusted_mutual_info_score(val_predicted_cluster_labels, val_targets)
+                    ari = adjusted_rand_score(val_predicted_cluster_labels, val_targets)
+                    silhouette_avg = silhouette_score(val_features, val_predicted_cluster_labels)
+                    
+                    print("Clustering with n_cluster={}, n_neighbors={}, min_dist={}".format(n_clusters, n_neighbors, min_dist))
+                    print("\tNMI: {} AMI: {} ARI: {}".format(round(nmi, 3), round(ami, 3), round(ari, 3)))
+                    print("\tsilhouette_score: {}".format(round(silhouette_avg, 3)))
 
-                with open("{}/hyperpameters_search.txt".format(args.save_folder), 'a') as file:
-                    file.write("NMI: {} AMI: {} ARI: {} silhouette: {}\tn_neighbors={}, min_dist={}\n".format(round(nmi, 3), round(ami, 3), round(ari, 3), round(silhouette_avg, 3), n_neighbors, min_dist))
+                    with open("{}/hyperpameters_search.txt".format(args.save_folder), 'a') as file:
+                        file.write("NMI: {} AMI: {} ARI: {} silhouette: {}\tn_components={} n_neighbors={}, min_dist={}\n".format(round(nmi, 3), round(ami, 3), round(ari, 3), round(silhouette_avg, 3),umap_n_components, n_neighbors, min_dist))
 
-                if ami > best_ami['ami']:
-                    best_ami['ami'] = ami
-                    best_ami['umap'] = umap
-                    best_ami['gmm'] = gmm
-                    best_ami["hyperparams"] = hyperparams_text
+                    if ami > best_ext['ami']:
+                        best_ext['ami'] = ami
+                        best_ext['umap'] = umap
+                        best_ext['gmm'] = gmm
+                        best_ext["hyperparams"] = hyperparams_text
+                    
+                    if silhouette_avg > best_int['silhouette_avg']:
+                        best_int["silhouette_avg"] = silhouette_avg
+                        best_int['umap'] = umap
+                        best_int['gmm'] = gmm
+                        best_int["hyperparams"] = hyperparams_text
+                else:
+                    print("Clustering with n_cluster={}, n_neighbors={}, min_dist={}".format(n_clusters, n_neighbors, min_dist))
+                    print("Failed because UMAP returned embeddings with Infinite or NaN values")
+                    with open("{}/hyperpameters_search.txt".format(args.save_folder), 'a') as file:
+                        file.write("NMI: -1 AMI: -1 ARI: -1 silhouette: -1\tn_neighbors={}, min_dist={}\n".format(n_neighbors, min_dist))
         
-        best_score = {}
         start = time.time()
-        print("Testing clustering with {}".format(best_ami["hyperparams"]))
-        test_embedding = best_ami['umap'].transform(test_features)
-        best_score['clustering_predictions'] = best_ami['gmm'].predict(test_embedding)
+        best_ext_score = {}
 
-        best_score["acc"], best_score['acc_per_class_total'], best_score['acc_per_class_relative'], best_score['cluster_class_assigned'] = calculate_clustering_accuracy_expanded_with_overclustering(best_score['clustering_predictions'], test_targets, num_classes)
-        best_score["nmi"] = normalized_mutual_info_score(best_score['clustering_predictions'], test_targets)
-        best_score["ami"] = adjusted_mutual_info_score(best_score['clustering_predictions'], test_targets)
-        best_score["ari"] = adjusted_rand_score(best_score['clustering_predictions'], test_targets)
-        best_score["silhouette_avg"] = silhouette_score(test_features, best_score['clustering_predictions'])
-        best_score["sample_silhouette_values"] = silhouette_samples(test_features, best_score['clustering_predictions'])
+        print("Testing clustering with {}".format(best_ext["hyperparams"]))
+        test_embedding = best_ext['umap'].transform(test_features)
+        best_ext_score['clustering_predictions'] = best_ext['gmm'].predict(test_embedding)
+
+        if cfg.calculate_acc:
+            best_ext_score["acc"], best_ext_score['acc_per_class_total'], best_ext_score['acc_per_class_relative'], best_ext_score['cluster_class_assigned'] = calculate_clustering_accuracy_expanded_with_overclustering(best_ext_score['clustering_predictions'], test_targets, num_classes)
+            f = lambda v: np.round(v, 2)
+            plot_acc_per_class(test_dataset.classes, f(best_ext_score['acc_per_class_total']), 'Best ACC accuracy per class total', 'total', args.save_folder)
+            plot_acc_per_class(test_dataset.classes, f(best_ext_score['acc_per_class_relative']), 'Best ACC accuracy per class relative', 'relative', args.save_folder)
+        else:
+            best_ext_score['acc'] = -1
+        best_ext_score["nmi"] = normalized_mutual_info_score(best_ext_score['clustering_predictions'], test_targets)
+        best_ext_score["ami"] = adjusted_mutual_info_score(best_ext_score['clustering_predictions'], test_targets)
+        best_ext_score["ari"] = adjusted_rand_score(best_ext_score['clustering_predictions'], test_targets)
+        best_ext_score["silhouette_avg"] = silhouette_score(test_features, best_ext_score['clustering_predictions'])
+        best_ext_score["sample_silhouette_values"] = silhouette_samples(test_features, best_ext_score['clustering_predictions'])
+
+        print("\nBest external clustering with n_clusters={}".format(n_clusters))
+        print("\tACC: {} NMI: {} AMI: {} ARI: {} silhouette: {}\t{}\n".format(best_ext_score["acc"], best_ext_score["nmi"], best_ext_score["ami"], best_ext_score["ari"], best_ext_score["silhouette_avg"], best_ext["hyperparams"]))
         
-        best_scores.append(best_score)
+        np.save("{}/best_ext_cluster_predictions_{}.npy".format(args.save_folder,  best_ext["hyperparams"]), best_ext_score["clustering_predictions"])
+        plot_GMM(tsne_2d, best_ext_score["clustering_predictions"], n_clusters, args.save_folder, "best_external")
+        plot_silhouette_scores(best_ext_score["sample_silhouette_values"], best_ext_score["silhouette_avg"], best_ext_score['clustering_predictions'], n_clusters, args.save_folder, "best_external")
+        
+        best_ext_scores.append(best_ext_score)
+        best_int_score = {}
+        
+        print("Testing clustering with {}".format(best_int["hyperparams"]))
+        test_embedding = best_int['umap'].transform(test_features)
+        best_int_score['clustering_predictions'] = best_int['gmm'].predict(test_embedding)
 
-        print("Clustering with n_clusters={}\n".format(n_clusters))
-        print("\tACC: {} NMI: {} AMI: {} ARI: {} silhouette: {}\t{}\n".format(best_score["acc"], best_score["nmi"], best_score["ami"], best_score["ari"], best_score["silhouette_avg"], n_clusters, best_ami["hyperparams"]))
+        if cfg.calculate_acc:
+            best_int_score["acc"], best_int_score['acc_per_class_total'], best_int_score['acc_per_class_relative'], best_int_score['cluster_class_assigned'] = calculate_clustering_accuracy_expanded_with_overclustering(best_int_score['clustering_predictions'], test_targets, num_classes)
+            f = lambda v: np.round(v, 2)
+            plot_acc_per_class(test_dataset.classes, f(best_int_score['acc_per_class_total']), 'Best ACC accuracy per class total', 'total', args.save_folder)
+            plot_acc_per_class(test_dataset.classes, f(best_int_score['acc_per_class_relative']), 'Best ACC accuracy per class relative', 'relative', args.save_folder)
+        else:
+            best_int_score['acc'] = -1
+        best_int_score["nmi"] = normalized_mutual_info_score(best_int_score['clustering_predictions'], test_targets)
+        best_int_score["ami"] = adjusted_mutual_info_score(best_int_score['clustering_predictions'], test_targets)
+        best_int_score["ari"] = adjusted_rand_score(best_int_score['clustering_predictions'], test_targets)
+        best_int_score["silhouette_avg"] = silhouette_score(test_features, best_int_score['clustering_predictions'])
+        best_int_score["sample_silhouette_values"] = silhouette_samples(test_features, best_int_score['clustering_predictions'])
+
+        print("\nBest internal clustering with n_clusters={}".format(n_clusters))
+        print("\tACC: {} NMI: {} AMI: {} ARI: {} silhouette: {}\t{}\n".format(best_int_score["acc"], best_int_score["nmi"], best_int_score["ami"], best_int_score["ari"], best_int_score["silhouette_avg"], best_int["hyperparams"]))
+        
+        np.save("{}/best_int_cluster_predictions_{}.npy".format(args.save_folder,  best_int["hyperparams"]), best_int_score["clustering_predictions"])
+        plot_GMM(tsne_2d, best_int_score["clustering_predictions"], n_clusters, args.save_folder, "best_internal")
+        plot_silhouette_scores(best_int_score["sample_silhouette_values"], best_int_score["silhouette_avg"], best_int_score['clustering_predictions'], n_clusters, args.save_folder, "best_internal")
+    
+        best_int_scores.append(best_int_score)
         time_passed = time.time() - start
         print("\tTime passed: ", time.time() - start)
 
         with open("{}/results.txt".format(args.save_folder), 'a') as file:
-            
-            
-            np.save("{}/cluster_predictions_{}.npy".format(args.save_folder,  best_ami["hyperparams"]), best_score["clustering_predictions"])
-            file.write("Clustering with n_cluster_{}_{}\n".format(n_clusters, best_ami["hyperparams"]))
-            file.write("ACC: {} NMI: {} AMI: {} ARI: {} silhouette: {}\n".format(best_score["acc"], best_score["nmi"], best_score["ami"], best_score["ari"], best_score["silhouette_avg"]))
-            file.write("Time passed: {} s".format(time_passed))
-
-            plot_tSNE(test_dataset, tsne_2d, test_targets, args.save_folder)
-            plot_GMM(tsne_2d, best_score["clustering_predictions"], n_clusters, args.save_folder)
-            plot_GMM_with_class_assigned(tsne_2d, best_score["clustering_predictions"], n_clusters, best_score['cluster_class_assigned'], test_dataset.classes, args.save_folder)
-            f = lambda v: np.round(v, 2)
-            plot_acc_per_class(test_dataset.classes, f(best_score['acc_per_class_total']), 'Best ACC accuracy per class total', 'total', args.save_folder)
-            plot_acc_per_class(test_dataset.classes, f(best_score['acc_per_class_relative']), 'Best ACC accuracy per class relative', 'relative', args.save_folder)
-
-            plot_silhouette_scores(best_score["sample_silhouette_values"], best_score["silhouette_avg"], best_score['clustering_predictions'], n_clusters, args.save_folder)
+            file.write("Best external clustering with n_cluster_{}_{}\n".format(n_clusters, best_ext["hyperparams"]))
+            file.write("ACC: {} NMI: {} AMI: {} ARI: {} silhouette: {}\n".format(best_ext_score["acc"], best_ext_score["nmi"], best_ext_score["ami"], best_ext_score["ari"], best_ext_score["silhouette_avg"]))
+            file.write("Best internal clustering with n_cluster_{}_{}\n".format(n_clusters, best_int["hyperparams"]))
+            file.write("ACC: {} NMI: {} AMI: {} ARI: {} silhouette: {}\n".format(best_int_score["acc"], best_int_score["nmi"], best_int_score["ami"], best_int_score["ari"], best_int_score["silhouette_avg"]))
+            file.write("Time passed: {} s\n".format(time_passed))
 
     # plotting scores
-    accs = []
-    nmis = []
-    amis = []
-    aris = []
-    silhouettes = []
-    
-    for i, n in enumerate(n_clusters_values):
-        
-        accs.append(best_scores[i]['acc'])
-        nmis.append(best_scores[i]['nmi'])
-        amis.append(best_scores[i]['ami'])
-        aris.append(best_scores[i]['ari'])
-        silhouettes.append(best_scores[i]['silhouette_avg'])
-        
-    fig, ax = plt.subplots(1, 1)
-    ax.plot(n_clusters_values, accs, label='ACC') 
-    ax.plot(n_clusters_values, nmis, label='NMI')
-    ax.plot(n_clusters_values, amis, label='AMI')
-    ax.plot(n_clusters_values, aris, label='ARI')
-    ax.plot(n_clusters_values, silhouettes, label='SILHOUETTE')
-   
-    ax.set_xlabel('num_cluster')
-    ax.set_ylabel('score')
-    ax.set_yticks([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
-    ax.grid(True)
-    ax.legend(); 
-    fig.savefig('{}/scores.svg'.format(original_save_folder))
-    plt.close()
+    plot_scores(n_clusters_values, best_ext_scores, original_save_folder, "best_external", cfg)
+    plot_scores(n_clusters_values, best_int_scores, original_save_folder, "best_internal", cfg)
 
 
-def extract_features_targets(model, dataset, args):
+def extract_features_targets(model, dataset, cfg):
     features = []
     targets = []
 
@@ -256,7 +270,7 @@ def extract_features_targets(model, dataset, args):
             img = img.cuda()
 
             feature = model.forward(img)
-            if args.features_layer == 'layer4':
+            if cfg.features_layer == 'layer4':
                 # flattening and normalizing if extracting from non fc layers
                 feature = torch.flatten(feature, 1)
                 feature = F.normalize(feature, dim=1)
@@ -354,7 +368,7 @@ def plot_UMAP(dataset, embedding, targets, save_folder, hyperparams, prefix):
     plt.close()
 
 
-def plot_GMM(embedding, predicted_cluster_labels, num_clusters, save_folder,):
+def plot_GMM(embedding, predicted_cluster_labels, num_clusters, save_folder, prefix):
     tx = embedding[:, 0]
     ty = embedding[:, 1]
 
@@ -368,7 +382,7 @@ def plot_GMM(embedding, predicted_cluster_labels, num_clusters, save_folder,):
     fig = plt.figure("GMM", figsize=(20,15))
     ax = fig.add_subplot(111)
     ax.scatter(tx, ty, c=colored_clusters)
-    fig.savefig('{}/GMM.svg'.format(save_folder))
+    fig.savefig('{}/{}GMM.svg'.format(save_folder, prefix + "_" if prefix else ""))
     plt.close()
 
 
@@ -417,7 +431,7 @@ def plot_acc_per_class(x, y, title, suffix, save_folder):
     plt.close()
 
 
-def plot_silhouette_scores(sample_silhouette_values, silhouette_avg, cluster_labels, n_clusters, save_folder):
+def plot_silhouette_scores(sample_silhouette_values, silhouette_avg, cluster_labels, n_clusters, save_folder, prefix):
     
     fig = plt.figure("Silhouette Scores", figsize=(10,20))
     ax = fig.add_subplot(111)
@@ -459,9 +473,41 @@ def plot_silhouette_scores(sample_silhouette_values, silhouette_avg, cluster_lab
     ax.set_yticks([])  # Clear the yaxis labels / ticks
     ax.set_xticks([-0.1, 0, 0.2, 0.4, 0.6, 0.8, 1])
 
-    plt.savefig("{}/silhouette.svg".format(save_folder))
+    plt.savefig("{}/{}silhouette.svg".format(save_folder, prefix + "_" if prefix else ""))
     plt.close()
 
+def plot_scores(n_clusters_values, scores, save_folder, prefix, cfg):
+    accs = []
+    nmis = []
+    amis = []
+    aris = []
+    silhouettes = []
+    
+    for i, n in enumerate(n_clusters_values):
+        
+        if cfg.calculate_acc:
+            accs.append(scores[i]['acc'])
+        nmis.append(scores[i]['nmi'])
+        amis.append(scores[i]['ami'])
+        aris.append(scores[i]['ari'])
+        silhouettes.append(scores[i]['silhouette_avg'])
+        
+    fig, ax = plt.subplots(1, 1)
+    if cfg.calculate_acc:
+        ax.plot(n_clusters_values, accs, label='ACC') 
+    ax.plot(n_clusters_values, nmis, label='NMI')
+    ax.plot(n_clusters_values, amis, label='AMI')
+    ax.plot(n_clusters_values, aris, label='ARI')
+    ax.plot(n_clusters_values, silhouettes, label='SILHOUETTE')
+   
+    ax.set_xlabel('num_cluster')
+    ax.set_ylabel('score')
+    ax.set_yticks([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+    ax.set_ylim(0.0, 1.0)
+    ax.grid(True)
+    ax.legend(); 
+    fig.savefig('{}/{}scores.svg'.format(save_folder, prefix + "_" if prefix else ""))
+    plt.close()
 
 if __name__ == '__main__':
     main()

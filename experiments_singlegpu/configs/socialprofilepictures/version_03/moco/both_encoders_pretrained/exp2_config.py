@@ -18,3 +18,17 @@ moco = dict(
     query_encoder_pretrained=True,
     key_encoder_pretrained=True
 )
+
+training = dict(
+    epochs = 150,
+    batch_size = 256,
+    lr = 0.06,
+    cosine_lr_decay = True,
+    keep_lr = False,
+    schedule_lr_decay = [],
+)
+
+optimizer = dict(
+    momentum = 0.9,
+    wd = 1e-4,
+)

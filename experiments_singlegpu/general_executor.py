@@ -44,6 +44,7 @@ from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_peopl
 from experiments_singlegpu.datasets.utils.analysis import calculate_SUN397_people_perc_from_SPP
 from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_false_positives_for_hierarchy_classes, calculate_scenes_false_positives_for_hierarchy_classes_v3
 from experiments_singlegpu.datasets.utils.analysis import calculate_people_false_positives_for_hierarchy_classes, calculate_people_false_positives_for_hierarchy_classes_v3
+from experiments_singlegpu.datasets.utils.analysis import extract_examples
 from itertools import combinations_with_replacement
 import multiprocessing
 from joblib import Parallel, delayed
@@ -51,8 +52,7 @@ from joblib import Parallel, delayed
 
 def main():  
     print("Ciao")
-
-    calculate_scenes_false_positives_for_hierarchy_classes_v3(wrong_predictions_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/lda/resnet18_pretrained/exp1/test_false_positives')
+    extract_examples('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/analysis_people_vs_scenes/sun397/wrong_predictions_with_people_perc.json', '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/analysis_people_vs_scenes/sun397_examples')
     
 
 def test_SPP_randomize():

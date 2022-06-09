@@ -68,28 +68,9 @@ parser.add_argument('--validation-freq', default=5, type=int,
                     help='epoch frequency of validating the model' )
 parser.add_argument('--print-freq', default=10, type=int,
                     metavar='N', help='print frequency (default: 10)')
-parser.add_argument('--epochs', default=1000, type=int, metavar='N',
-                    help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
 
-# training hyperparams
-parser.add_argument('--batch-size', default=128, type=int,
-                    metavar='N',
-                    help='mini-batch size (default: 128)')
-parser.add_argument('--lr', '--learning-rate', default=0.015, type=float,
-                    metavar='LR', help='initial learning rate', dest='lr')
-parser.add_argument('--schedule', default=[120, 160], nargs='*', type=int,
-                    help='learning rate schedule (when to drop lr by 10x)')
-parser.add_argument('--cos', action='store_true',
-                    help='use cosine lr schedule')
-parser.add_argument('--keep-lr', default=False, type=Boolean, 
-                    help='use it after a complete training with cosine lr schedule in order to keep the last lr value fixed')
-parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
-                    help='momentum of SGD solver')
-parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
-                    metavar='W', help='weight decay (default: 1e-4)',
-                    dest='weight_decay')
 
 # knn test hyperparameters
 parser.add_argument('--knn_test', default=False, type=Boolean, help='enable kNN test')
@@ -191,14 +172,14 @@ def main():
 
     # creating dataset loaders for train
     pair_train_loader = torch.utils.data.DataLoader(
-        pair_train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
+        pair_train_dataset, batch_size=cfg.training.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True, drop_last=True)
     # creating datasets loaders for validation
     validation_train_loader = torch.utils.data.DataLoader(
-        validation_train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
+        validation_train_dataset, batch_size=cfg.training.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True)
     validation_test_loader = torch.utils.data.DataLoader(
-        validation_test_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, 
+        validation_test_dataset, batch_size=cfg.training.batch_size, shuffle=True, num_workers=1, 
         pin_memory=True)
 
     # creating model MoCo 
@@ -211,9 +192,9 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay)
+    optimizer = torch.optim.SGD(model.parameters(), cfg.training.lr,
+                                momentum=cfg.optimizer.momentum,
+                                weight_decay=cfg.optimizer.weight_decay)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -247,7 +228,7 @@ def main():
         linear_classifier_lda_test(model.encoder_q, validation_train_loader, validation_test_loader, 0, linear_classifier_train_writer, linear_classifier_test_writer, args, cfg)
 
     best_acc = 0.0
-    for epoch in range(args.start_epoch, args.epochs):
+    for epoch in range(args.start_epoch, cfg.training.epochs):
 
         # lr scheduling
         new_lr = adjust_learning_rate(optimizer, epoch, args)
@@ -640,18 +621,17 @@ class ProgressMeter(object):
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
 
-def adjust_learning_rate(optimizer, epoch, args):
+def adjust_learning_rate(optimizer, epoch, cfg):
     """Decay the learning rate based on schedule"""
-    lr = args.lr
-    if args.keep_lr:    # if you want to continue training after cosine schedule cycle completed 
+    lr = cfg.training.lr
+    if cfg.training.keep_lr:    # if you want to continue training after cosine schedule cycle completed 
                         # keeping fixed the last lr value
-        print("mantengo lr")
         lr = optimizer.param_groups[0]['lr']
     else:
-        if args.cos:  # cosine lr schedule
-            lr *= 0.5 * (1. + math.cos(math.pi * epoch / args.epochs))
+        if cfg.training.cosine_lr_decay:  # cosine lr schedule
+            lr *= 0.5 * (1. + math.cos(math.pi * epoch / cfg.training.epochs))
         else:  # stepwise lr schedule
-            for milestone in args.schedule:
+            for milestone in cfg.training.schedule_lr_decay:
                 lr *= 0.1 if epoch >= milestone else 1.
 
     for param_group in optimizer.param_groups:
