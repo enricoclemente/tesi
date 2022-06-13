@@ -57,7 +57,7 @@ def calculate_EMOTIC_people_perc_from_SPP(dataset_folder, save_folder, wrong_pre
     counters = {"mscoco_all": 0, "mscoco_scenes": 0, "mscoco_selfies": 0, "emodb_all": 0, "emodb_scenes": 0, "emodb_selfies": 0,}
 
     scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
-                    "transportation", "sports_and_leisure", "cultural",
+                    "sports_and_leisure", "cultural",
                     "water_ice_snow", "mountains_hills_desert_sky",
                     "forest_field_jungle", "man-made_elements",
                     "transportation", "cultural_or_historical_building_place",
@@ -609,10 +609,7 @@ def calculate_SUN397_people_perc_from_SPP(dataset_folder, save_folder):
                 y0 = round(float(predicted_bboxes['ymin'][j]), 2)
                 x1 = round(float(predicted_bboxes['xmax'][j]), 2)
                 y1 = round(float(predicted_bboxes['ymax'][j]), 2)
-                # print(x0)
-                # print(y0)
-                # print(x1)
-                # print(y1)
+
                 bbox = Polygon([(x0,y0), (x1, y0), (x1, y1), (x0, y1)])
                 bboxes.append(bbox)
         # if results.pandas().xyxy[0]['name'] == 'person':
@@ -657,7 +654,7 @@ def calculate_SUN397_people_perc_from_SPP(dataset_folder, save_folder):
     plt.close()
 
 
-def calculate_scenes_people_perc_from_SPP(spp_folder, sun_folder, save_folder, wrong_predictions_folder):
+def calculate_scenes_people_perc_from_SPP(dataset_folder, dataset_version, randomize_metadata, save_folder, wrong_predictions_folder):
 
     wrong_images_paths = {}
     wrong_images_people_perc_total = {0: 0, 10: 0, 20: 0, 30: 0, 40: 0, 50: 0, 60: 0, 70: 0, 80: 0, 90: 0, 100: 0}
@@ -668,7 +665,7 @@ def calculate_scenes_people_perc_from_SPP(spp_folder, sun_folder, save_folder, w
     wrong_predictions_with_people_perc = {}
 
     scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
-            "transportation", "sports_and_leisure", "cultural",
+            "sports_and_leisure", "cultural",
             "water_ice_snow", "mountains_hills_desert_sky",
             "forest_field_jungle", "man-made_elements",
             "transportation", "cultural_or_historical_building_place",
@@ -678,16 +675,18 @@ def calculate_scenes_people_perc_from_SPP(spp_folder, sun_folder, save_folder, w
     for scene in scenes:
         with open("{}/{}_false_positives.txt".format(wrong_predictions_folder, scene), "r") as f:
             lines = f.readlines()
-
+            
             for i, line in enumerate(lines):
                 if i > 0:
                     img_path = line.split(":")[1].split(",")[0].replace("'","").strip()
-                    if "nonselfie" in line:
+
+                    wrong_prediction = line.split("wrong_prediction")[1]
+                    if "nonselfie" in wrong_prediction:
                         wrong_images_paths[img_path] = {"wrong_prediction": "nonselfie"}
-                    elif "selfie" in line:
+                    elif "selfie" in wrong_prediction:
                         wrong_images_paths[img_path] = {"wrong_prediction": "selfie"}
     
-    dataset = SocialProfilePictures(root=spp_folder, split=['train', 'test', 'val'], aspect_ratio_threshold=2.33, dim_threshold=225)
+    dataset = SocialProfilePictures(version=dataset_version, randomize_metadata=randomize_metadata, root=dataset_folder, split=['train', 'test', 'val'], aspect_ratio_threshold=2.33, dim_threshold=225)
 
     print("Dataset has {} images".format(len(dataset)))
 
@@ -912,9 +911,9 @@ def calculate_scenes_people_perc_from_SPP(spp_folder, sun_folder, save_folder, w
     plt.close()
 
 
-def calculate_scenes_false_positives_for_hierarchy_classes(dataset_folder, save_folder, wrong_predictions_folder):
+def calculate_scenes_false_positives_for_hierarchy_classes(wrong_predictions_folder):
     scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
-                    "transportation", "sports_and_leisure", "cultural",
+                    "sports_and_leisure", "cultural",
                     "water_ice_snow", "mountains_hills_desert_sky",
                     "forest_field_jungle", "man-made_elements",
                     "transportation", "cultural_or_historical_building_place",
@@ -953,15 +952,7 @@ def calculate_scenes_false_positives_for_hierarchy_classes(dataset_folder, save_
     print(wrong_predictions_level_0)
     print(wrong_predictions_level_1)
 
-def calculate_people_false_positives_for_hierarchy_classes(dataset_folder, save_folder, wrong_predictions_folder):
-
-    scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
-                    "transportation", "sports_and_leisure", "cultural",
-                    "water_ice_snow", "mountains_hills_desert_sky",
-                    "forest_field_jungle", "man-made_elements",
-                    "transportation", "cultural_or_historical_building_place",
-                    "sportsfields_parks_leisure_spaces", "industrial_and_construction",
-                    "houses_cabins_gardens_and_farms", "commercial_buildings"]
+def calculate_people_false_positives_for_hierarchy_classes(wrong_predictions_folder):
     
     wrong_predictions_level_0 = { 'people': 0, 'scenes': 0, 'other': 0}
     wrong_predictions_selfie_level_1 = {'selfie': 0, 'nonselfie': 0, 'scenes': 0, 'pet': 0, 'cartoon': 0, 'art': 0}
@@ -974,7 +965,7 @@ def calculate_people_false_positives_for_hierarchy_classes(dataset_folder, save_
                 wrong_prediction = line.split("wrong_prediction")[1]
                 if "nonselfie" in wrong_prediction:
                     wrong_predictions_level_0['people'] += 1
-                    wrong_predictions_selfie_level_1['nonselfie'] +=1       
+                    wrong_predictions_selfie_level_1['nonselfie'] +=1 
                 elif ('cat' in wrong_prediction or 'dog' in wrong_prediction or 'cartoon' in wrong_prediction 
                     or 'drawings' in wrong_prediction or 'engraving' in wrong_prediction or 
                     'iconography' in wrong_prediction or 'painting' in wrong_prediction or 'sculpture' in wrong_prediction):
@@ -1018,7 +1009,7 @@ def calculate_people_false_positives_for_hierarchy_classes(dataset_folder, save_
 
 def calculate_scenes_false_positives_for_hierarchy_classes_v3(wrong_predictions_folder):
     scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
-                    "transportation", "sports_and_leisure", "cultural",
+                    "sports_and_leisure", "cultural",
                     "water_ice_snow", "mountains_hills_desert_sky",
                     "forest_field_jungle", "man-made_elements",
                     "transportation", "cultural_or_historical_building_place",
@@ -1054,79 +1045,9 @@ def calculate_scenes_false_positives_for_hierarchy_classes_v3(wrong_predictions_
     print(wrong_predictions_level_0)
     print(wrong_predictions_level_1)
 
-def calculate_people_false_positives_for_hierarchy_classes(dataset_folder, save_folder, wrong_predictions_folder):
-
-    scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
-                    "transportation", "sports_and_leisure", "cultural",
-                    "water_ice_snow", "mountains_hills_desert_sky",
-                    "forest_field_jungle", "man-made_elements",
-                    "transportation", "cultural_or_historical_building_place",
-                    "sportsfields_parks_leisure_spaces", "industrial_and_construction",
-                    "houses_cabins_gardens_and_farms", "commercial_buildings"]
-    
-    wrong_predictions_level_0 = { 'people': 0, 'scenes': 0, 'other': 0}
-    wrong_predictions_selfie_level_1 = {'selfie': 0, 'nonselfie': 0, 'scenes': 0, 'pet': 0, 'cartoon': 0, 'art': 0}
-    wrong_predictions_nonselfie_level_1 = {'selfie': 0, 'nonselfie': 0, 'scenes': 0, 'pet': 0, 'cartoon': 0, 'art': 0}
-    with open("{}/selfie_false_positives.txt".format(wrong_predictions_folder), "r") as f:
-        lines = f.readlines()
-
-        for i, line in enumerate(lines):
-            if i > 0:
-                wrong_prediction = line.split("wrong_prediction")[1]
-                if "nonselfie" in wrong_prediction:
-                    wrong_predictions_level_0['people'] += 1
-                    wrong_predictions_selfie_level_1['nonselfie'] +=1       
-                elif ('cat' in wrong_prediction or 'dog' in wrong_prediction or 'cartoon' in wrong_prediction 
-                    or 'drawings' in wrong_prediction or 'engraving' in wrong_prediction or 
-                    'iconography' in wrong_prediction or 'painting' in wrong_prediction or 'sculpture' in wrong_prediction):
-                    wrong_predictions_level_0['other'] += 1
-                    if 'cat' in wrong_prediction or 'dog' in wrong_prediction:
-                        wrong_predictions_selfie_level_1['pet'] += 1
-                    elif 'cartoon' in wrong_prediction:
-                        wrong_predictions_selfie_level_1['cartoon'] += 1
-                    else:
-                        wrong_predictions_selfie_level_1['art'] += 1
-                else:
-                    wrong_predictions_level_0['scenes'] += 1
-                    wrong_predictions_selfie_level_1['scenes'] += 1
-    
-    with open("{}/nonselfie_false_positives.txt".format(wrong_predictions_folder), "r") as f:
-        lines = f.readlines()
-
-        for i, line in enumerate(lines):
-            if i > 0:
-                wrong_prediction = line.split("wrong_prediction")[1]
-                if "selfie" in wrong_prediction:
-                    wrong_predictions_level_0['people'] += 1
-                    wrong_predictions_nonselfie_level_1['selfie'] +=1       
-                elif ('cat' in wrong_prediction or 'dog' in wrong_prediction or 'cartoon' in wrong_prediction 
-                    or 'drawings' in wrong_prediction or 'engraving' in wrong_prediction or 
-                    'iconography' in wrong_prediction or 'painting' in wrong_prediction or 'sculpture' in wrong_prediction):
-                    wrong_predictions_level_0['other'] += 1
-                    if 'cat' in wrong_prediction or 'dog' in wrong_prediction:
-                        wrong_predictions_nonselfie_level_1['pet'] += 1
-                    elif 'cartoon' in wrong_prediction:
-                        wrong_predictions_nonselfie_level_1['cartoon'] += 1
-                    else:
-                        wrong_predictions_nonselfie_level_1['art'] += 1
-                else:
-                    wrong_predictions_level_0['scenes'] += 1
-                    wrong_predictions_nonselfie_level_1['scenes'] += 1
-    print(wrong_predictions_level_0)
-    print(wrong_predictions_selfie_level_1)
-    print(wrong_predictions_nonselfie_level_1)
-
 
 def calculate_people_false_positives_for_hierarchy_classes_v3(dataset_folder, save_folder, wrong_predictions_folder):
 
-    scenes = ["shopping_and_dining", "workplace", "home_or_hotel",
-                    "transportation", "sports_and_leisure", "cultural",
-                    "water_ice_snow", "mountains_hills_desert_sky",
-                    "forest_field_jungle", "man-made_elements",
-                    "transportation", "cultural_or_historical_building_place",
-                    "sportsfields_parks_leisure_spaces", "industrial_and_construction",
-                    "houses_cabins_gardens_and_farms", "commercial_buildings"]
-    
     wrong_predictions_level_0 = { 'people': 0, 'scenes': 0, 'other': 0}
     wrong_predictions_level_1 = {'people': 0, 'scenes': 0, 'pet': 0, 'cartoon': 0, 'art': 0}
     with open("{}/people_false_positives.txt".format(wrong_predictions_folder), "r") as f:
@@ -1154,7 +1075,7 @@ def calculate_people_false_positives_for_hierarchy_classes_v3(dataset_folder, sa
 
 
 # extract examples of wrong predictions for every percentage and class
-def extract_examples(wrong_predictions_file, save_folder):
+def extract_examples(wrong_predictions_file, save_folder, n_examples_per_folder):
     wrong_predictions = json.load(open(wrong_predictions_file, 'r'))
 
     randomized_images = list(wrong_predictions.keys())
@@ -1165,9 +1086,27 @@ def extract_examples(wrong_predictions_file, save_folder):
         if not os.path.exists(perc_sub_folder):
             os.makedirs(os.path.join(perc_sub_folder))
 
-        if len(os.listdir(perc_sub_folder)) < 5:
+        if len(os.listdir(perc_sub_folder)) < n_examples_per_folder:
             img_path = os.path.join('/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets', p)
             shutil.copy(img_path, perc_sub_folder)
         
 
-
+def make_SPP_v2_analysis():
+    # calculate_scenes_false_positives_for_hierarchy_classes('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda/resnet18_pretrained/exp1/train_false_positives')
+    # calculate_people_false_positives_for_hierarchy_classes('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda/resnet18_pretrained/exp1/train_false_positives')
+    
+    # calculate_EMOTIC_people_perc_from_SPP(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets/EMOTIC/data',
+    #                                         save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/emotic',
+    #                                         wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda/resnet18_pretrained/exp1/train_false_positives/nonselfie_false_positives.txt',
+    #                                         use_yolo=True,
+    #                                         adjust_ground_truth=False)
+    # calculate_scenes_people_perc_from_SPP(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
+    #                                 dataset_version=2, randomize_metadata=False,
+    #                                 save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/sun397',
+    #                                 wrong_predictions_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda/resnet18_pretrained/exp1/train_false_positives')
+    extract_examples(wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/emotic/wrong_predictions_with_people_perc_with_yolo.json', 
+                    save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/emotic_examples',
+                    n_examples_per_folder=7)
+    extract_examples(wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/sun397/wrong_predictions_with_people_perc.json',
+                    save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/sun397_examples', 
+                    n_examples_per_folder=7)

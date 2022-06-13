@@ -49,9 +49,7 @@ from experiments_singlegpu.self_supervised_learning.utils import extract_feature
 parser = argparse.ArgumentParser(description='PyTorch MoCo Training')
 parser.add_argument("--config_file", default="./experiments_config_example.py", metavar="FILE",
                     help="path to config file", type=str)
-# arguments for saving and resuming   
-parser.add_argument('--dataset', default="cifar10", type=str,
-                    help="name of the dataset, this lead to different script choices")                
+# arguments for saving and resuming                  
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets',
                     help='path to dataset')
 parser.add_argument('--resume', default='./results/checkpoints/checkpoint_last.pth.tar', type=str, metavar='PATH',
@@ -118,7 +116,7 @@ def main():
         transforms.ToTensor(),
         dataset_normalization
         ]
-    if args.dataset == 'cifar10':
+    if cfg.dataset.dataset_name == 'cifar10':
         # resnet18_cifar which is an implementation adapted for CIFAR10
         base_encoder = resnet18_cifar
 
@@ -138,7 +136,7 @@ def main():
                                         dataset_normalization]),  
             download=True)
 
-    elif args.dataset == 'socialprofilepictures':
+    elif cfg.dataset.dataset_name == 'socialprofilepictures':
         # base resnet18 encoder since using images of the same size of ImageNet
         base_encoder = models.resnet18
 
@@ -194,7 +192,7 @@ def main():
 
     optimizer = torch.optim.SGD(model.parameters(), cfg.training.lr,
                                 momentum=cfg.optimizer.momentum,
-                                weight_decay=cfg.optimizer.weight_decay)
+                                weight_decay=cfg.optimizer.wd)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -231,7 +229,7 @@ def main():
     for epoch in range(args.start_epoch, cfg.training.epochs):
 
         # lr scheduling
-        new_lr = adjust_learning_rate(optimizer, epoch, args)
+        new_lr = adjust_learning_rate(optimizer, epoch, cfg)
         train_writer.add_scalar('Learning rate/lr decay', new_lr, epoch)
         
         # training

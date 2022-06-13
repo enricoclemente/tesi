@@ -15,7 +15,7 @@ n_cluster_values = dict(
 )
 
 umap = dict(
-    fix_n_components = True,
+    fix_n_components = False,
     n_epochs = 1000
 )
 

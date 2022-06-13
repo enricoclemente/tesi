@@ -1,4 +1,5 @@
 dataset = dict(
+    dataset_name = "socialprofilepictures",
     version=3,
     randomize_metadata=True,
     img_size = 224,

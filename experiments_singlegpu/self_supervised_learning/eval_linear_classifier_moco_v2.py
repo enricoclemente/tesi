@@ -42,9 +42,9 @@ parser.add_argument("--config_file", default="./experiments_config_example.py", 
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
 parser.add_argument('--model_path', type=str, default=None,
-                    help='The pretrained model path')
+                    help='path to model (checkpoint) trained with moco')
 parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
-                    help='path to results')
+                    help='path where to save results')
 
 parser.add_argument('--batch-size', default=512, type=int,
                     help='Number of images in each mini-batch')

@@ -20,7 +20,7 @@ import numpy as np
     In this implementation I will ignore Trimap and head bbox annotations.
 
     Statistics:
-
+    
         level1: cat, dog
         level2: {'abyssinian': 198, 'american_bulldog': 200, 'american_pit_bull_terrier': 200, 'basset_hound': 200, 'beagle': 200, 'bengal': 200, 'birman': 200, 'bombay': 184, 'boxer': 199, 'british_shorthair': 200, 'chihuahua': 200, 'egyptian_mau': 190, 'english_cocker_spaniel': 196, 'english_setter': 200, 'german_shorthaired': 200, 'great_pyrenees': 200, 'havanese': 200, 'japanese_chin': 200, 'keeshond': 199, 'leonberger': 200, 'maine_coon': 200, 'miniature_pinscher': 200, 'newfoundland': 196, 'persian': 200, 'pomeranian': 200, 'pug': 200, 'ragdoll': 200, 'russian_blue': 200, 'saint_bernard': 200, 'samoyed': 200, 'scottish_terrier': 199, 'shiba_inu': 200, 'siamese': 199, 'sphynx': 200, 'staffordshire_bull_terrier': 189, 'wheaten_terrier': 200, 'yorkshire_terrier': 200}
 

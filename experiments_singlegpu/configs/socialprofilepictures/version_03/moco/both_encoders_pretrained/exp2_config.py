@@ -1,4 +1,5 @@
 dataset = dict(
+    dataset_name = "socialprofilepictures",
     version=3,
     randomize_metadata=True,
     img_size = 224,
@@ -11,7 +12,7 @@ dataset = dict(
 
 moco = dict(
     moco_dim=128,
-    moco_k=4096,
+    moco_k=32768,
     moco_m=0.999,
     moco_t=0.2,
     mlp=True,

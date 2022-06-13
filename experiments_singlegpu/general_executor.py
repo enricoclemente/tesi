@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import sys
 import os
-from click import version_option
 sys.path.insert(0, './')
 
 import torch
@@ -44,7 +43,7 @@ from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_peopl
 from experiments_singlegpu.datasets.utils.analysis import calculate_SUN397_people_perc_from_SPP
 from experiments_singlegpu.datasets.utils.analysis import calculate_scenes_false_positives_for_hierarchy_classes, calculate_scenes_false_positives_for_hierarchy_classes_v3
 from experiments_singlegpu.datasets.utils.analysis import calculate_people_false_positives_for_hierarchy_classes, calculate_people_false_positives_for_hierarchy_classes_v3
-from experiments_singlegpu.datasets.utils.analysis import extract_examples
+from experiments_singlegpu.datasets.utils.analysis import extract_examples, make_SPP_v2_analysis
 from itertools import combinations_with_replacement
 import multiprocessing
 from joblib import Parallel, delayed
@@ -52,8 +51,7 @@ from joblib import Parallel, delayed
 
 def main():  
     print("Ciao")
-    extract_examples('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/analysis_people_vs_scenes/sun397/wrong_predictions_with_people_perc.json', '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/analysis_people_vs_scenes/sun397_examples')
-    
+    make_SPP_v2_analysis()
 
 def test_SPP_randomize():
     dataset = SocialProfilePictures(version=3, root='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
@@ -91,8 +89,7 @@ def make_analysis_people_vs_scene():
                                         wrong_predictions_file = '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/moco/resnet18_pretrained/exp1/linear_classifier/train_false_positives/nonselfie_false_positives.txt',
                                         use_yolo=True, 
                                         adjust_ground_truth=False)
-    calculate_scenes_people_perc_from_SPP(spp_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
-                                        sun_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets/SUN397/data',
+    calculate_scenes_people_perc_from_SPP(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
                                         save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_nonselfie_vs_scenes/sun397',
                                         wrong_predictions_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/moco/resnet18_pretrained/exp1/linear_classifier/train_false_positives')
     calculate_scenes_false_positives_for_hierarchy_classes(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets/EMOTIC/data',

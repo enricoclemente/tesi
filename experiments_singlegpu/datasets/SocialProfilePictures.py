@@ -56,7 +56,14 @@ class SocialProfilePictures(Dataset):
     """
     def __init__(self, root: str, split: Union[List[str], str] = "train", split_perc: float = 0.8,
                 transform: Optional[Callable] = None, partition_perc: float = 1.0,
-                aspect_ratio_threshold: float = None, dim_threshold: int = None, version: int = 1, randomize_metadata: bool = False):
+                aspect_ratio_threshold: float = None, dim_threshold: int = None, version: int = None, randomize_metadata: bool = None):
+        
+        if version == None:
+            raise NotImplementedError("You must choose a dataset version!")
+        
+        if randomize_metadata == None:
+            raise NotImplementedError("You must choose if randomize data")
+
         self.root = root
 
         if isinstance(split, list):

@@ -70,7 +70,7 @@ def main():
     else:
         model = resnet18(num_classes=128)
         loc = 'cuda:{}'.format(torch.cuda.current_device())
-        checkpoint = torch.load(args.model_path, map_location=loc)
+        checkpoint = torch.load(cfg.model_path, map_location=loc)
         dim_mlp = model.fc.in_features
         model.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), model.fc)
         state_dict = dict()
