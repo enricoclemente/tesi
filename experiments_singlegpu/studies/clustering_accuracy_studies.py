@@ -55,10 +55,10 @@ def clustering_accuracy_spice_overcluster(y_pred, y_true):
             for i in range(N):
                 for j in range(N):
                     idx = np.logical_and(y_pred == cluster_labels[i], y_true == class_combination[j])
-                    print("For cluster {} and class {}".format(i, j))
-                    print(y_pred == cluster_labels[i])
-                    print(y_true == class_combination[j])
-                    print(idx)
+                    # print("For cluster {} and class {}".format(i, j))
+                    # print(y_pred == cluster_labels[i])
+                    # print(y_true == class_combination[j])
+                    # print(idx)
                     C[i][j] = np.count_nonzero(idx)
             Cmax = np.amax(C)
             C = Cmax - C
@@ -78,7 +78,7 @@ def clustering_accuracy_spice_overcluster(y_pred, y_true):
             count = 0
             for i in range(N):
                 idx = np.logical_and(y_pred == cluster_labels[row[i]], y_true == class_combination[col[i]])
-                print("class: {} has accuracy: {}".format(col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i])))
+                print("cluster: {} assigned to class: {} gives accuracy: {}".format(row[i], col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i])))
                 count += np.count_nonzero(idx) 
     
             acc = 1.0 * count / len(y_true)
@@ -99,10 +99,10 @@ def clustering_accuracy_spice_overcluster(y_pred, y_true):
         for i in range(N):
             for j in range(N):
                 idx = np.logical_and(y_pred == cluster_labels[i], y_true == class_labels[j])
-                print("For cluster {} and class {}".format(i, j))
-                print(y_pred == cluster_labels[i])
-                print(y_true == class_labels[j])
-                print(idx)
+                # print("For cluster {} and class {}".format(i, j))
+                # print(y_pred == cluster_labels[i])
+                # print(y_true == class_labels[j])
+                # print(idx)
                 C[i][j] = np.count_nonzero(idx)
         Cmax = np.amax(C)
         C = Cmax - C
@@ -135,7 +135,7 @@ def clustering_accuracy_spice_overcluster(y_pred, y_true):
     else:
         return -1, [], []
 
-def compute_lnear_assignment(comb, class_labels, cluster_labels):
+def compute_linear_assignment(comb, class_labels, cluster_labels):
 
     class_combination = np.concatenate([class_labels, comb])
     print("Class combination: ", class_combination)
@@ -170,7 +170,7 @@ def compute_lnear_assignment(comb, class_labels, cluster_labels):
     count = 0
     for i in range(N):
         idx = np.logical_and(y_pred == cluster_labels[row[i]], y_true == class_combination[col[i]])
-        print("class: {} has accuracy: {}".format(col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i])))
+        print("cluster: {} assigned to class: {} gives accuracy: {}".format(row[i], col[i], np.count_nonzero(idx)/y_true.tolist().count(col[i])))
         count += np.count_nonzero(idx) 
 
     acc = 1.0 * count / len(y_true)
@@ -193,20 +193,10 @@ def clustering_accuracy_spice_overcluster_parallel(y_pred, y_true):
 
         overcluster = len(cluster_labels) - len(class_labels)
         class_extra_combinations = combinations_with_replacement(class_labels, overcluster)
-
-        # print("Combinations", list(class_extra_combinations))
-
-        # pool = mp.Pool(mp.cpu_count())
-
-        # # Step 2: `pool.apply` the `howmany_within_range()`
-        # results = [pool.apply(compute_lnear_assignment, args=(i, class_labels, cluster_labels)) for i in class_extra_combinations]
-
-        # # Step 3: Don't forget to close
-        # pool.close()    
-        results = Parallel(n_jobs=mp.cpu_count())(delayed(compute_lnear_assignment)(i, class_labels, cluster_labels) 
+  
+        results = Parallel(n_jobs=mp.cpu_count())(delayed(compute_linear_assignment)(i, class_labels, cluster_labels) 
                                                         for i in class_extra_combinations)
         
-
         for res in results:
             if res[0] > best_combination["acc"]:
                 best_combination["acc"] = res[0]
@@ -260,19 +250,11 @@ def clustering_accuracy_spice_overcluster_parallel(y_pred, y_true):
     else:
         return -1, [], []
 
-def giorgio(i):
-    print("zio")
-    return i
 
 if __name__ == '__main__':
 
-    y_pred = np.array([1,1,1,2,0,0,2,3,3,4,4,5,6])
-    y_true = np.array([0,0,0,1,1,1,1,1,1,2,2,3,3])
-    start = time.time()
+    y_pred = np.array([1,0,3,4,2,2,2,2,2,3,3])
+    y_true = np.array([0,0,0,0,0,0,0,1,1,2,2])
+    
     clustering_accuracy_spice_overcluster(y_pred, y_true)
-    end = time.time()
-    print("Not parallel: ", end - start)
-    start = time.time()
-    clustering_accuracy_spice_overcluster_parallel(y_pred, y_true)
-    end = time.time()
-    print("Parallel: ", end - start)
+    

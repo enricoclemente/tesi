@@ -1046,7 +1046,7 @@ def calculate_scenes_false_positives_for_hierarchy_classes_v3(wrong_predictions_
     print(wrong_predictions_level_1)
 
 
-def calculate_people_false_positives_for_hierarchy_classes_v3(dataset_folder, save_folder, wrong_predictions_folder):
+def calculate_people_false_positives_for_hierarchy_classes_v3(wrong_predictions_folder):
 
     wrong_predictions_level_0 = { 'people': 0, 'scenes': 0, 'other': 0}
     wrong_predictions_level_1 = {'people': 0, 'scenes': 0, 'pet': 0, 'cartoon': 0, 'art': 0}

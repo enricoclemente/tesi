@@ -1,13 +1,11 @@
 #!/usr/bin/env python
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+
 import argparse
-from enum import unique
 import math
 import os
 import shutil
 import time
 import sys
-from xmlrpc.client import Boolean
 sys.path.insert(0, './')
 
 import torch
@@ -71,7 +69,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
 
 
 # knn test hyperparameters
-parser.add_argument('--knn_test', default=False, type=Boolean, help='enable kNN test')
+parser.add_argument('--knn_test', default=False, type=bool, help='enable kNN test')
 parser.add_argument('--knn-k', default=200, type=int, help='k in kNN monitor')
 parser.add_argument('--knn-t', default=0.1, type=float, help='softmax temperature in kNN monitor; could be different with moco-t')
 

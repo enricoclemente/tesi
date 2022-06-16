@@ -2,21 +2,13 @@
 import argparse
 import sys
 import os
-import math
-
 sys.path.insert(0, './')
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10
 from experiments_singlegpu.datasets.SocialProfilePictures import SocialProfilePictures, SocialProfilePicturesPro
 import torchvision.transforms as transforms
-from experiments_singlegpu.datasets.utils.custom_transforms import PadToSquare
-from experiments_singlegpu.datasets.utils.custom_transforms import DoNothing
 
 import torchvision.models as models
 
@@ -28,8 +20,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sn
 
-from torch.utils.tensorboard import SummaryWriter
-from experiments_singlegpu.self_supervised_learning.utils import extract_features_targets, extract_features_targets_indices
+from experiments_singlegpu.self_supervised_learning.utils import extract_features_targets_indices
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support

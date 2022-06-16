@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import torch
 
 from torchvision.models.resnet import resnet18
+import open_clip
 from experiments_singlegpu.datasets.SocialProfilePictures import SocialProfilePictures
 
 import torchvision.transforms as transforms
@@ -43,10 +44,10 @@ def main():
     cfg = Config.fromfile(args.config_file)
 
     # set seed in order to reproduce always the same result
-    seed = 10
-    random.seed(seed)
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+    # seed = 10
+    # random.seed(seed)
+    # torch.manual_seed(seed)
+    # np.random.seed(seed)
 
     # setting of save_folder
     if not os.path.exists(args.save_folder):
@@ -62,29 +63,38 @@ def main():
                     transform=transforms.Compose([  transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
                                                     transforms.ToTensor()]))
 
-    model = resnet18()
-    if not os.path.isfile(cfg.model_path):
-        # if not available a previously trained model on moco use pretrained one on Imagenet
-        print("Using pretrained model on ImageNet")
-        model = resnet18(pretrained=True)
+    if cfg.model == "resnet18":
+        model = resnet18()
+        if not os.path.isfile(cfg.model_path):
+            # if not available a previously trained model on moco use pretrained one on Imagenet
+            print("Using pretrained model on ImageNet")
+            model = resnet18(pretrained=True)
+        else:
+            model = resnet18(num_classes=128)
+            loc = 'cuda:{}'.format(torch.cuda.current_device())
+            checkpoint = torch.load(cfg.model_path, map_location=loc)
+            dim_mlp = model.fc.in_features
+            model.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), model.fc)
+            state_dict = dict()
+            for key in checkpoint['state_dict']:
+                
+                if key.startswith("encoder_q"):
+                    # print(key[22:])
+                    state_dict[key[10:]] = checkpoint['state_dict'][key]
+            model.load_state_dict(state_dict, strict=False)
+        
+        if cfg.features_layer == 'layer4':
+            # removing fc layer 
+            model = torch.nn.Sequential(*(list(model.children())[:-1]))
+    elif cfg.model == "vit_b_32":
+        if not os.path.isfile(cfg.model_path):
+            # if not available a previously trained model on moco use pretrained one on Imagenet
+            print("Using pretrained model on LAION-2B E16")
+            model, _, _ = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_e16')
+        else:
+            raise NotImplementedError("Not yet implemented trained ViT model")
     else:
-        model = resnet18(num_classes=128)
-        loc = 'cuda:{}'.format(torch.cuda.current_device())
-        checkpoint = torch.load(cfg.model_path, map_location=loc)
-        dim_mlp = model.fc.in_features
-        model.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), model.fc)
-        state_dict = dict()
-        for key in checkpoint['state_dict']:
-            
-            if key.startswith("encoder_q"):
-                # print(key[22:])
-                state_dict[key[10:]] = checkpoint['state_dict'][key]
-        model.load_state_dict(state_dict, strict=False)
-    
-    
-    if cfg.features_layer == 'layer4':
-        # removing fc layer 
-        model = torch.nn.Sequential(*(list(model.children())[:-1]))
+        raise NotImplementedError("Choose a valid model!")
     
     for p in model.parameters():
         p.requires_grad = False
@@ -269,11 +279,16 @@ def extract_features_targets(model, dataset, cfg):
         for i, (img, target) in enumerate(loader):
             img = img.cuda()
 
-            feature = model.forward(img)
-            if cfg.features_layer == 'layer4':
+            if cfg.model == "resnet18":
+                feature = model.forward(img)
+            elif cfg.model == "vit_b_32":
+                feature = model.encode_image(img)
+            
+            if cfg.features_layer == 'layer4' and cfg.model == "resnet18":
                 # flattening and normalizing if extracting from non fc layers
                 feature = torch.flatten(feature, 1)
-                feature = F.normalize(feature, dim=1)
+            
+            feature = F.normalize(feature, dim=1)
 
             # collecting all features and targets
             features.append(feature.cpu())
@@ -325,45 +340,6 @@ def plot_tSNE(dataset, embedding, targets, save_folder):
 
     # finally, show the plot
     fig.savefig('{}/t-SNE.svg'.format(save_folder))
-    # legendFig.savefig('{}/UMAP_legend.svg'.format(args.save_folder))
-    plt.close()
-
-
-def plot_UMAP(dataset, embedding, targets, save_folder, hyperparams, prefix):
-    colors_per_class = {}
-    for class_name in dataset.classes:
-        colors_per_class[class_name] = list(np.random.choice(range(256), size=3))
-    
-    # extract x and y coordinates 
-    tx = embedding[:, 0]
-    ty = embedding[:, 1]
-
-    # initialize a matplotlib plot
-    fig = plt.figure("UMAP", figsize=(20,15))
-    ax = fig.add_subplot(111)
-    box = ax.get_position()
-    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-
-    plots = list(range(len(dataset.classes)))
-    # for every class, we'll add a scatter plot separately
-    for class_index, class_name in enumerate(dataset.classes):
-        # find the samples of the current class in the data
-        indices = [i for i, l in enumerate(targets) if l == class_index]
-        # extract the coordinates of the points of this class only
-        current_tx = np.take(tx, indices)
-        current_ty = np.take(ty, indices)
-        # convert the class color to matplotlib format
-        color = np.array(colors_per_class[class_name], dtype=float) / 255
-        # add a scatter plot with the corresponding color and label
-        plots[class_index] = ax.scatter(current_tx, current_ty,  c=color, label=class_name)
-    
-    # build a legend using the labels we set previously
-    ax.legend(bbox_to_anchor=(1.0, 1.0))
-    legendFig = plt.figure("UMAP legend", figsize=(5,7))
-    legendFig.legend(plots, dataset.classes, loc='center')
-
-    # finally, show the plot
-    fig.savefig('{}/{}_UMAP_{}.svg'.format(save_folder, prefix, hyperparams))
     # legendFig.savefig('{}/UMAP_legend.svg'.format(args.save_folder))
     plt.close()
 

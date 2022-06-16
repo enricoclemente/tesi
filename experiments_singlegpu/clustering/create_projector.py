@@ -27,13 +27,9 @@ from experiments_singlegpu.datasets.utils.custom_transforms import PadToSquare
 parser = argparse.ArgumentParser(description='Tensorboard Projector Creator')
 parser.add_argument("--config_file", default="./experiments_config_example.py", metavar="FILE",
                     help="path to config file", type=str)
-parser.add_argument('--dataset', default="cifar10", type=str,
-                    help="name of the dataset, this lead to different script choices")
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
-parser.add_argument('--model_path', default=None, type=str, metavar='PATH',
-                    help='path to previously trained model, if not set and dataset is SPP, it will be used ResNet18 pretrained on ImageNet')
-parser.add_argument('--logs_folder', metavar='DIR', default='./results/cifar10/moco/logs',
+parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco/logs',
                     help='path to tensorboard logs')
 parser.add_argument('--batch-size', default=128, type=int,
                     metavar='N',
@@ -48,8 +44,8 @@ def main():
     cfg = Config.fromfile(args.config_file)
 
     # setting of logs_folder
-    if not os.path.exists(args.logs_folder):
-        os.makedirs(args.logs_folder)
+    if not os.path.exists(args.save_folder):
+        os.makedirs(args.save_folder)
 
     # checking GPU and showing infos
     if not torch.cuda.is_available():
@@ -62,16 +58,15 @@ def main():
     dataset = None
     dataset_sprites = None
 
-    dataset_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)
-    if args.dataset == 'cifar10':
+    if cfg.dataset.dataset_name == 'cifar10':
         # creating model MoCo using resnet18_cifar which is an implementation adapted for CIFAR10
         model = resnet18_cifar()
 
         dataset = CIFAR10(root=args.dataset_folder, train=False, 
                 transform=transforms.Compose([transforms.ToTensor()]),  
                 download=True)
-    elif args.dataset == 'socialprofilepictures':
-        model = resnet18(pretrained=True if not args.model_path else False)
+    elif args.dataset.dataset_name == 'socialprofilepictures':
+        model = resnet18(pretrained=True if not cfg.model_path else False)
 
         dataset = SocialProfilePictures(version=cfg.dataset.version, root=args.dataset_folder, split='val', randomize_metadata=cfg.dataset.randomize_metadata,
                 transform=transforms.Compose([ transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
@@ -87,12 +82,12 @@ def main():
         raise NotImplementedError("Choose a valid dataset!")
 
     # optionally resume from a moco checkpoint
-    if args.model_path:
+    if cfg.model_path:
         if os.path.isfile(args.model_path):
-            print("=> loading model parameters '{}'".format(args.model_path))
+            print("=> loading model parameters '{}'".format(cfg.model_path))
             # Map model to be loaded to specified single gpu.
             loc = 'cuda:{}'.format(torch.cuda.current_device())
-            checkpoint = torch.load(args.model_path, map_location=loc)
+            checkpoint = torch.load(cfg.model_path, map_location=loc)
             state_dict = dict()
             for key in checkpoint['state_dict']:
                 print(key)
@@ -101,7 +96,7 @@ def main():
             
             model.load_state_dict(state_dict, strict=False)
         else:
-            raise NotImplementedError("=> no checkpoint found at '{}'".format(args.model_path))
+            raise NotImplementedError("=> no checkpoint found at '{}'".format(cfg.model_path))
     else:
         print("Model path not specified, if the dataset is SPP, pretrained model on ImageNet will be used")
 
@@ -112,7 +107,7 @@ def main():
     cudnn.benchmark = True  # A bool that, if True, causes cuDNN to benchmark multiple convolution algorithms and select the fastest.
 
     # tensorboard plotter
-    test_writer = SummaryWriter(args.logs_folder + "/validation_set")
+    test_writer = SummaryWriter(args.save_folder + "/validation_set")
 
     create_projector(model, dataset, dataset_sprites, test_writer, 'layer_4', args)
 
