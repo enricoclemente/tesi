@@ -6,6 +6,7 @@ dataset = dict(
 )
 
 features_layer = "layer4"
+model="resnet18"
 model_path=""
 
 n_cluster_values = dict(

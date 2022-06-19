@@ -6,6 +6,7 @@ dataset = dict(
 )
 
 features_layer = "layer4"
+model="resnet18"
 # exp2 with moco both encoders pretrained
 model_path = '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/moco/both_encoders_pretrained/exp2/checkpoints/checkpoint_last.pth.tar'
 

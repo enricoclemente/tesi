@@ -1,0 +1,16 @@
+embeddings:
+  tSNE:
+    x: x.tsne
+    y: y.tsne
+  default: tSNE
+color-columns:
+  categorical:
+    - cluster
+image-column:
+  url
+tooltip-columns:
+  - class
+  - img_name
+  - url
+plots:
+  glyph_size: 10

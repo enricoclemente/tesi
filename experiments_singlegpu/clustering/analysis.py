@@ -69,12 +69,16 @@ def aggregate_clustering_results_and_plot(root, folders, save_folder, prefix):
     fig.savefig('{}/{}scores.svg'.format(save_folder, prefix))
     plt.close()
 
+
 def main():
     aggregate_clustering_results_and_plot('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/umap+gmm/moco_both_encoders_pretrained_exp2',
-                                        ['exp1', 'exp2'], '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/analysis', "moco_both_encoders_pretrained_exp2_")
+                                        ['exp1', 'exp2'], '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/analysis_clustering', "moco_both_encoders_pretrained_exp2_")
 
     aggregate_clustering_results_and_plot('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/umap+gmm/resnet18_pretrained',
-                                    ['exp2', 'exp4'], '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/analysis', "resnet18_pretrained_")
+                                    ['exp2', 'exp4'], '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/analysis_clustering', "resnet18_pretrained_")
+
+    aggregate_clustering_results_and_plot('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/clustering/umap+gmm/vit_b_32_pretrained',
+                                    ['exp1', 'exp2'], '/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_03/analysis_clustering', "vic_b_32_pretrained_")
 
 if __name__ == '__main__':
     main()

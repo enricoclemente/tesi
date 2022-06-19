@@ -32,7 +32,7 @@ import time
 
 parser = argparse.ArgumentParser(description='UMAP+GMM calculator (experiments)')
 parser.add_argument("--config_file", default="./experiments_config_example.py", metavar="FILE",
-                    help="path to config file (same used with moco training)", type=str)
+                    help="path to config file", type=str)
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
 parser.add_argument('--save_folder', metavar='DIR', default='./results',
