@@ -43,12 +43,6 @@ def main():
     args = parser.parse_args()
     cfg = Config.fromfile(args.config_file)
 
-    # set seed in order to reproduce always the same result
-    # seed = 10
-    # random.seed(seed)
-    # torch.manual_seed(seed)
-    # np.random.seed(seed)
-
     # setting of save_folder
     if not os.path.exists(args.save_folder):
         os.makedirs(args.save_folder)

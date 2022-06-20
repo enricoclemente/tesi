@@ -5,15 +5,15 @@ import os
 sys.path.insert(0, './')
 
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR10
 from experiments_singlegpu.datasets.SocialProfilePictures import SocialProfilePictures, SocialProfilePicturesPro
 import torchvision.transforms as transforms
 
-import torchvision.models as models
+from torchvision.models import resnet18
+import open_clip
 
 from SPICE.spice.config import Config
-from SPICE.spice.model.feature_modules.resnet_cifar import resnet18_cifar
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -32,14 +32,11 @@ parser.add_argument("--config_file", default="./experiments_config_example.py", 
                     help="path to config file (same used with moco training)", type=str) 
 parser.add_argument('--dataset_folder', metavar='DIR', default='./datasets/cifar10',
                     help='path to dataset')
-parser.add_argument('--model_path', type=str, default=None,
-                    help='path to model (checkpoint) trained with moco')
 parser.add_argument('--save_folder', metavar='DIR', default='./results/cifar10/moco',
                     help='path where to save results')
 
 parser.add_argument('--batch-size', default=512, type=int,
                     help='Number of images in each mini-batch')
-
 
 
 def main():  
@@ -59,82 +56,69 @@ def main():
 
     torch.cuda.set_device(torch.cuda.current_device())
 
-    encoder = models.resnet18()
-    train_dataset = None
-    test_dataset = None
-    dataset_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)
+    dataset_normalization = transforms.Normalize(mean=cfg.dataset.normalization.mean, std=cfg.dataset.normalization.std)    
     
-    if cfg.dataset.dataset_name == 'cifar10':
-        # resnet18_cifar which is an implementation adapted for CIFAR10
-        encoder = resnet18_cifar()
+    # SPP train dataset 
+    train_dataset = SocialProfilePicturesPro(version=cfg.dataset.version, root=args.dataset_folder, split="train", randomize_metadata=cfg.dataset.randomize_metadata,
+                                transform=transforms.Compose([
+                                            transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]),
+                                            transforms.RandomResizedCrop(cfg.dataset.img_size),
+                                            transforms.RandomHorizontalFlip(),
+                                            transforms.ToTensor(),
+                                            dataset_normalization]))
 
-        # CIFAR10 train  dataset
-        train_dataset = CIFAR10(root=args.dataset_folder, train=True, 
-                        transform=transforms.Compose([transforms.ToTensor(), dataset_normalization]), download=True)
-        test_dataset = CIFAR10(root=args.dataset_folder, train=False, 
-                        transform=transforms.Compose([transforms.ToTensor(), dataset_normalization]), download=True)
-
-    elif cfg.dataset.dataset_name == 'socialprofilepictures':
-        # base resnet18 encoder since using images of the same size of ImageNet
-        encoder = models.resnet18(pretrained=True if not args.model_path else False)
-
-        # SPP train dataset 
-        train_dataset = SocialProfilePicturesPro(version=cfg.dataset.version, root=args.dataset_folder, split="train", randomize_metadata=cfg.dataset.randomize_metadata,
-                                    transform=transforms.Compose([
-                                                transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]),
-                                                transforms.RandomResizedCrop(cfg.dataset.img_size),
-                                                transforms.RandomHorizontalFlip(),
-                                                transforms.ToTensor(),
-                                                dataset_normalization]))
-
-        # SPP test dataset
-        test_dataset = SocialProfilePicturesPro(version=cfg.dataset.version, root=args.dataset_folder, split="test", randomize_metadata=cfg.dataset.randomize_metadata,
-                                    transform=transforms.Compose([
-                                                transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
-                                                transforms.ToTensor(),
-                                                dataset_normalization]))
-    else:
-        raise NotImplementedError("You must choose a valid dataset!")
+    # SPP test dataset
+    test_dataset = SocialProfilePicturesPro(version=cfg.dataset.version, root=args.dataset_folder, split="test", randomize_metadata=cfg.dataset.randomize_metadata,
+                                transform=transforms.Compose([
+                                            transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]), 
+                                            transforms.ToTensor(),
+                                            dataset_normalization]))
     
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True, num_workers=1, pin_memory=True)
 
-    if args.model_path:
-        if os.path.isfile(args.model_path):
-            print("Loading previously trained model on MoCo")
+    if cfg.model == "resnet18":
+        model = resnet18()
+        if not os.path.isfile(cfg.model_path):
+            # if not available a previously trained model on moco use pretrained one on Imagenet
+            print("Using pretrained model on ImageNet")
+            model = resnet18(pretrained=True)
+        else:
+            model = resnet18(num_classes=128)
             loc = 'cuda:{}'.format(torch.cuda.current_device())
-            checkpoint = torch.load(args.model_path, map_location=loc)
+            checkpoint = torch.load(cfg.model_path, map_location=loc)
+            dim_mlp = model.fc.in_features
+            model.fc = nn.Sequential(nn.Linear(dim_mlp, dim_mlp), nn.ReLU(), model.fc)
             state_dict = dict()
             for key in checkpoint['state_dict']:
                 if key.startswith("encoder_q"):
                     state_dict[key[10:]] = checkpoint['state_dict'][key]
-            
-            encoder.load_state_dict(state_dict, strict=False)
+            model.load_state_dict(state_dict, strict=False)
+        # remove the fc layer from model
+        model = nn.Sequential(*(list(model.children())[:-1]))
+        # print(encoder)
+        # freeze model parameters
+        
+    elif cfg.model == "vit_b_32":
+        if not os.path.isfile(cfg.model_path):
+            # if not available a previously trained model on moco use pretrained one on Imagenet
+            print("Using pretrained model on LAION-2B E16")
+            model, _, _ = open_clip.create_model_and_transforms('ViT-B-32', pretrained='laion2b_e16')
         else:
-            raise NotImplementedError("=> no checkpoint found at '{}'".format(args.model_path))
+            raise NotImplementedError("Not yet implemented trained ViT model")
     else:
-        print("Model path not specified, if the dataset is SPP, pretrained model on ImageNet will be used")
-    
-    # remove the fc layer from encoder
-    encoder = torch.nn.Sequential(*(list(encoder.children())[:-1])).cuda()
-    # print(encoder)
-    # freeze encoder parameters
-    for param in encoder.parameters():
+        raise NotImplementedError("Choose a valid model!")
+
+    for param in model.parameters():
         param.requires_grad = False
-    
-    train_features = []
-    train_targets = []
-    train_indices = []
-    test_features = []
-    test_targets = []
-    test_indices = []
+
+    model.cuda()
 
     print("Extracting training features")
-    train_features, train_targets, train_indices = extract_features_targets_indices(encoder, train_loader, normalize=False)
+    train_features, train_targets, train_indices = extract_features_targets_indices(model, train_loader, cfg)
 
     print("Extracting test features")
-    test_features, test_targets, test_indices = extract_features_targets_indices(encoder, test_loader, normalize=False)
-
+    test_features, test_targets, test_indices = extract_features_targets_indices(model, test_loader, cfg)
 
     train_confusion_matrix_save_folder = os.path.join(args.save_folder, "train_confusion_matrix")
     if not os.path.exists(train_confusion_matrix_save_folder):

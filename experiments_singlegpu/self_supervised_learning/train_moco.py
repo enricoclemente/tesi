@@ -147,7 +147,7 @@ def main():
                                                 transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]) if cfg.dataset.train_resize else DoNothing()] +
                                                 mocov2_augmentation))
 
-        # creating SPP datasets for knn test
+        # creating SPP datasets for validation
         validation_train_dataset = SocialProfilePictures(version=cfg.dataset.version, randomize_metadata=cfg.dataset.randomize_metadata, root=args.dataset_folder, split="train", 
                                     transform=transforms.Compose(
                                                 [PadToSquare() if cfg.dataset.test_padding else DoNothing(),    
