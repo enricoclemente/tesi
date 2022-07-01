@@ -232,10 +232,10 @@ def train_test_lda(split, model, dataset, features, targets, indices, confusion_
     
     with open("{}/{}_results.txt".format(args.save_folder, split), 'a') as file:
         file.write('Linear Classifier {}'.format(split))
-        file.write('\n\tAcc@1:{:.2f}'.format(top1))
-        file.write('\n\tWith average=micro precision:{:.2f} recall:{:.2f} f1 score:{:.2f}'.format(precision_micro, recall_micro, f1_score_micro))
-        file.write('\n\tWith average=macro precision:{:.2f} recall:{:.2f} f1 score:{:.2f}'.format(precision_macro, recall_macro, f1_score_macro))
-        file.write('\n\tWith average=weighted precision:{:.2f} recall:{:.2f} f1 score:{:.2f}'.format(precision_weighted, recall_weighted, f1_score_weighted))        
+        file.write('\n\tAcc@1:{:.3f}'.format(top1))
+        file.write('\n\tWith average=micro precision:{:.3f} recall:{:.3f} f1 score:{:.3f}'.format(precision_micro, recall_micro, f1_score_micro))
+        file.write('\n\tWith average=macro precision:{:.3f} recall:{:.3f} f1 score:{:.3f}'.format(precision_macro, recall_macro, f1_score_macro))
+        file.write('\n\tWith average=weighted precision:{:.3f} recall:{:.3f} f1 score:{:.3f}'.format(precision_weighted, recall_weighted, f1_score_weighted))        
         file.write('\n\tPrecision, recall, f1 score per class')
         for i, v in enumerate(dataset.classes):
             file.write('\n\t {}: {:.2f}\t{:.2f}\t{:.2f}'.format(v, precision_per_class[i], recall_per_class[i], f1_score_per_class[i]))
@@ -254,7 +254,7 @@ def train_test_lda(split, model, dataset, features, targets, indices, confusion_
 def plot_bar_chart(x, y, title, ylabel, save_folder):
     plt.xticks(rotation=45, ha='right')
     rect = plt.bar(x, y)
-    plt.bar_label(rect, padding=3)
+    # plt.bar_label(rect, padding=3)
 
     plt.gca().set(title=title, ylabel=ylabel)
     plt.tight_layout()
@@ -279,7 +279,7 @@ def plot_multiple_bar_chart(x_labels, title, ylabel, save_folder, y_values, y_la
     plt.gca().set(title=title, ylabel=ylabel)
     for i,y in enumerate(y_values):
         rects = plt.bar(x_values + widths[i], y, width, label=y_labels[i])
-        plt.bar_label(rects, fmt='%.2f', padding=3)
+        # plt.bar_label(rects, fmt='%.2f', padding=3)
     
     plt.xticks(x_values, x_labels, rotation=45, ha='right')
     plt.legend()

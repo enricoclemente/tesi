@@ -1,7 +1,8 @@
+#!/usr/bin/env python
+import argparse
+import sys
 import os
-import csv
-import json
-import shutil
+sys.path.insert(0, './')
 
 import torch
 from torch.utils.data import Dataset
@@ -15,7 +16,7 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 import random
-
+import json
 
 class DatasetTriplet(Dataset):
     """
@@ -291,8 +292,9 @@ def calculate_EMOTIC_people_perc_from_SPP(dataset_folder, save_folder, wrong_pre
     # plt.close()
 
     plt.figure('Ratio people/image bar chart')
-    fig, (ax0, ax1) = plt.subplots(2,1, figsize=(13, 10))
+    # fig, (ax0, ax1) = plt.subplots(2,1, figsize=(13, 10))
 
+    fig, ax0 = plt.subplots(figsize=(13, 5))
     width0 = 8.0
     rect = ax0.bar(images_people_perc_total_sorted.keys(), 
                     images_people_perc_total_sorted.values(), width=width0, label='mscoco + emodb', color='green')
@@ -308,23 +310,23 @@ def calculate_EMOTIC_people_perc_from_SPP(dataset_folder, save_folder, wrong_pre
     ax0.set_ylabel('# of images')
 
     width1 = 0.4
-    x = np.arange(len(list(images_people_perc_mscoco_sorted.keys())))
-    rect_mscoco = ax1.bar(x - width1/2, images_people_perc_mscoco_sorted.values(), width1, label='mscoco', color='yellow')
-    ax1.bar_label(rect_mscoco, padding=3)
-    x = np.arange(len(list(images_people_perc_emodb_sorted.keys())))
-    rect_emodb = ax1.bar(x + width1/2, images_people_perc_emodb_sorted.values(), width1, label='emodb', color='blue')
-    ax1.bar_label(rect_emodb, padding=3)
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(list(images_people_perc_total_sorted.keys()))
-    ax1.set_title('Area occupied by people in images')
-    ax1.legend(loc='upper left')
-    ax1.set_xlabel('percentage of area occupied by people [%]')
-    ax1.set_ylabel('# of images')
+    # x = np.arange(len(list(images_people_perc_mscoco_sorted.keys())))
+    # rect_mscoco = ax1.bar(x - width1/2, images_people_perc_mscoco_sorted.values(), width1, label='mscoco', color='yellow')
+    # ax1.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(images_people_perc_emodb_sorted.keys())))
+    # rect_emodb = ax1.bar(x + width1/2, images_people_perc_emodb_sorted.values(), width1, label='emodb', color='blue')
+    # ax1.bar_label(rect_emodb, padding=3)
+    # ax1.set_xticks(x)
+    # ax1.set_xticklabels(list(images_people_perc_total_sorted.keys()))
+    # ax1.set_title('Area occupied by people in images')
+    # ax1.legend(loc='upper left')
+    # ax1.set_xlabel('percentage of area occupied by people [%]')
+    # ax1.set_ylabel('# of images')
     
     bottom, top = ax0.get_ylim()
     ax0.set_ylim([bottom, top + top*0.2])
-    bottom, top = ax1.get_ylim()
-    ax1.set_ylim([bottom, top + top*0.2])
+    # bottom, top = ax1.get_ylim()
+    # ax1.set_ylim([bottom, top + top*0.2])
     fig.subplots_adjust(hspace=0.3)
     plt.savefig("{}/bar_chart_nonselfie_perc_people_area{}{}.svg".format(save_folder, "_with_yolo" if use_yolo else "", "_adjusted_g_truth" if adjust_ground_truth else ""))
     plt.close()
@@ -334,8 +336,8 @@ def calculate_EMOTIC_people_perc_from_SPP(dataset_folder, save_folder, wrong_pre
         exit()
 
     plt.figure('Ratio people/image for wrong predictions bar chart')
-    fig, (ax0, ax1, ax2) = plt.subplots(3,1, figsize=(13, 15))
-
+    # fig, (ax0, ax1, ax2) = plt.subplots(3,1, figsize=(13, 15))
+    fig, (ax0, ax1) = plt.subplots(2,1, figsize=(13, 10))
     width0 = 8.0
     rect = ax0.bar(wrong_images_people_perc_total.keys(), 
                     wrong_images_people_perc_total.values(), width=width0, label='selfie + scenes', color='orange')
@@ -362,41 +364,42 @@ def calculate_EMOTIC_people_perc_from_SPP(dataset_folder, save_folder, wrong_pre
     ax1.set_ylabel('# of images')
 
     width2 = width1/2
-    x = np.arange(len(list(wrong_images_people_perc_mscoco_scenes.keys())))
-    rect_mscoco = ax2.bar(x - width1 * 3/4 , wrong_images_people_perc_mscoco_scenes.values(), width2, label='mscoco', color='green')
-    ax2.bar_label(rect_mscoco, padding=3)
-    x = np.arange(len(list(wrong_images_people_perc_emodb_scenes.keys())))
-    rect_mscoco = ax2.bar(x - width1/4, wrong_images_people_perc_emodb_scenes.values(), width2, label='emodb', color='blue')
-    ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_mscoco_scenes.keys())))
+    # rect_mscoco = ax2.bar(x - width1 * 3/4 , wrong_images_people_perc_mscoco_scenes.values(), width2, label='mscoco', color='green')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_emodb_scenes.keys())))
+    # rect_mscoco = ax2.bar(x - width1/4, wrong_images_people_perc_emodb_scenes.values(), width2, label='emodb', color='blue')
+    # ax2.bar_label(rect_mscoco, padding=3)
     
 
-    x = np.arange(len(list(wrong_images_people_perc_mscoco_selfies.keys())))
-    rect_mscoco = ax2.bar(x + width1/4, wrong_images_people_perc_mscoco_selfies.values(), width2, color='green')
-    ax2.bar_label(rect_mscoco, padding=3)
-    x = np.arange(len(list(wrong_images_people_perc_emodb_selfies.keys())))
-    rect_mscoco = ax2.bar(x + width1* 3/4, wrong_images_people_perc_emodb_selfies.values(), width2, color='blue')
-    ax2.bar_label(rect_mscoco, padding=3)
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(list(wrong_images_people_perc_selfie.keys()))
-    ax2.set_title('Area occupied by people in wrong prediction images')
-    ax2.legend(loc='upper left')
-    ax2.set_xlabel('percentage of area occupied by people [%]')
-    ax2.set_ylabel('# of images')
+    # x = np.arange(len(list(wrong_images_people_perc_mscoco_selfies.keys())))
+    # rect_mscoco = ax2.bar(x + width1/4, wrong_images_people_perc_mscoco_selfies.values(), width2, color='green')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_emodb_selfies.keys())))
+    # rect_mscoco = ax2.bar(x + width1* 3/4, wrong_images_people_perc_emodb_selfies.values(), width2, color='blue')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # ax2.set_xticks(x)
+    # ax2.set_xticklabels(list(wrong_images_people_perc_selfie.keys()))
+    # ax2.set_title('Area occupied by people in wrong prediction images')
+    # ax2.legend(loc='upper left')
+    # ax2.set_xlabel('percentage of area occupied by people [%]')
+    # ax2.set_ylabel('# of images')
     
     
     bottom, top = ax0.get_ylim()
     ax0.set_ylim([bottom, top + top*0.2])
     bottom, top = ax1.get_ylim()
     ax1.set_ylim([bottom, top + top*0.2])
-    bottom, top = ax2.get_ylim()
-    ax2.set_ylim([bottom, top + top*0.2])
+    # bottom, top = ax2.get_ylim()
+    # ax2.set_ylim([bottom, top + top*0.2])
     fig.subplots_adjust(hspace=0.3)
     plt.savefig("{}/bar_chart_nonselfie_wrong_predictions_perc_people_area{}{}.svg".format(save_folder, "_with_yolo" if use_yolo else "", "_adjusted_g_truth" if adjust_ground_truth else ""))
     plt.close()
 
     
     plt.figure('Ratio people/image for wrong predictions weighted on total bar chart')
-    fig, (ax0, ax1, ax2) = plt.subplots(3,1, figsize=(13, 15))
+    # fig, (ax0, ax1, ax2) = plt.subplots(3,1, figsize=(13, 15))
+    fig, (ax0, ax1) = plt.subplots(2,1, figsize=(13, 10))
 
     wrong_images_people_perc_total_weighted = {}
     for key in wrong_images_people_perc_total.keys():
@@ -449,40 +452,40 @@ def calculate_EMOTIC_people_perc_from_SPP(dataset_folder, save_folder, wrong_pre
         wrong_images_people_perc_emodb_selfies_weighted[key] = round(wrong_images_people_perc_emodb_selfies[key] / len(dataset) * 100, 2)
 
     width2 = width1/2
-    x = np.arange(len(list(wrong_images_people_perc_mscoco_scenes_weighted.keys())))
-    rect_mscoco = ax2.bar(x - width1 * 3/4 , wrong_images_people_perc_mscoco_scenes_weighted.values(), width2, label='mscoco', color='green')
-    ax2.bar_label(rect_mscoco, padding=3)
-    x = np.arange(len(list(wrong_images_people_perc_emodb_scenes_weighted.keys())))
-    rect_mscoco = ax2.bar(x - width1/4, wrong_images_people_perc_emodb_scenes_weighted.values(), width2, label='emodb', color='blue')
-    ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_mscoco_scenes_weighted.keys())))
+    # rect_mscoco = ax2.bar(x - width1 * 3/4 , wrong_images_people_perc_mscoco_scenes_weighted.values(), width2, label='mscoco', color='green')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_emodb_scenes_weighted.keys())))
+    # rect_mscoco = ax2.bar(x - width1/4, wrong_images_people_perc_emodb_scenes_weighted.values(), width2, label='emodb', color='blue')
+    # ax2.bar_label(rect_mscoco, padding=3)
 
-    x = np.arange(len(list(wrong_images_people_perc_mscoco_selfies_weighted.keys())))
-    rect_mscoco = ax2.bar(x + width1/4, wrong_images_people_perc_mscoco_selfies_weighted.values(), width2, color='green')
-    ax2.bar_label(rect_mscoco, padding=3)
-    x = np.arange(len(list(wrong_images_people_perc_emodb_selfies_weighted.keys())))
-    rect_mscoco = ax2.bar(x + width1* 3/4, wrong_images_people_perc_emodb_selfies_weighted.values(), width2, color='blue')
-    ax2.bar_label(rect_mscoco, padding=3)
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(list(wrong_images_people_perc_selfie_weighted.keys()))
-    ax2.set_title('Area occupied by people in wrong prediction images')
-    ax2.legend(loc='upper left')
-    ax2.set_xlabel('percentage of area occupied by people [%]')
-    ax2.set_ylabel('percentage of images [%]')
+    # x = np.arange(len(list(wrong_images_people_perc_mscoco_selfies_weighted.keys())))
+    # rect_mscoco = ax2.bar(x + width1/4, wrong_images_people_perc_mscoco_selfies_weighted.values(), width2, color='green')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_emodb_selfies_weighted.keys())))
+    # rect_mscoco = ax2.bar(x + width1* 3/4, wrong_images_people_perc_emodb_selfies_weighted.values(), width2, color='blue')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # ax2.set_xticks(x)
+    # ax2.set_xticklabels(list(wrong_images_people_perc_selfie_weighted.keys()))
+    # ax2.set_title('Area occupied by people in wrong prediction images')
+    # ax2.legend(loc='upper left')
+    # ax2.set_xlabel('percentage of area occupied by people [%]')
+    # ax2.set_ylabel('percentage of images [%]')
     
     
     bottom, top = ax0.get_ylim()
     ax0.set_ylim([bottom, top + top*0.2])
     bottom, top = ax1.get_ylim()
     ax1.set_ylim([bottom, top + top*0.2])
-    bottom, top = ax2.get_ylim()
-    ax2.set_ylim([bottom, top + top*0.2])
+    # bottom, top = ax2.get_ylim()
+    # ax2.set_ylim([bottom, top + top*0.2])
     fig.subplots_adjust(hspace=0.3)
     plt.savefig("{}/bar_chart_nonselfie_wrong_predictions_perc_people_area_weighted{}{}.svg".format(save_folder, "_with_yolo" if use_yolo else "", "_adjusted_g_truth" if adjust_ground_truth else ""))
     plt.close()
 
     plt.figure('Ratio people/image for wrong predictions weighted on every percentage bar chart')
-    fig, (ax0, ax1, ax2) = plt.subplots(3,1, figsize=(13, 15))
-
+    # fig, (ax0, ax1, ax2) = plt.subplots(3,1, figsize=(13, 15))
+    fig, (ax0, ax1) = plt.subplots(2,1, figsize=(13, 10))
     wrong_images_people_perc_total_weighted = {}
     for key in wrong_images_people_perc_total.keys():
         wrong_images_people_perc_total_weighted[key] = round(wrong_images_people_perc_total[key] / max(images_people_perc_total[key], 1) * 100, 2)
@@ -534,33 +537,33 @@ def calculate_EMOTIC_people_perc_from_SPP(dataset_folder, save_folder, wrong_pre
         wrong_images_people_perc_emodb_selfies_weighted[key] = round(wrong_images_people_perc_emodb_selfies[key] / max(images_people_perc_total[key], 1) * 100, 2)
 
     width2 = width1/2
-    x = np.arange(len(list(wrong_images_people_perc_mscoco_scenes_weighted.keys())))
-    rect_mscoco = ax2.bar(x - width1 * 3/4 , wrong_images_people_perc_mscoco_scenes_weighted.values(), width2, label='mscoco', color='green')
-    ax2.bar_label(rect_mscoco, padding=3)
-    x = np.arange(len(list(wrong_images_people_perc_emodb_scenes_weighted.keys())))
-    rect_mscoco = ax2.bar(x - width1/4, wrong_images_people_perc_emodb_scenes_weighted.values(), width2, label='emodb', color='blue')
-    ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_mscoco_scenes_weighted.keys())))
+    # rect_mscoco = ax2.bar(x - width1 * 3/4 , wrong_images_people_perc_mscoco_scenes_weighted.values(), width2, label='mscoco', color='green')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_emodb_scenes_weighted.keys())))
+    # rect_mscoco = ax2.bar(x - width1/4, wrong_images_people_perc_emodb_scenes_weighted.values(), width2, label='emodb', color='blue')
+    # ax2.bar_label(rect_mscoco, padding=3)
 
-    x = np.arange(len(list(wrong_images_people_perc_mscoco_selfies_weighted.keys())))
-    rect_mscoco = ax2.bar(x + width1/4, wrong_images_people_perc_mscoco_selfies_weighted.values(), width2, color='green')
-    ax2.bar_label(rect_mscoco, padding=3)
-    x = np.arange(len(list(wrong_images_people_perc_emodb_selfies_weighted.keys())))
-    rect_mscoco = ax2.bar(x + width1* 3/4, wrong_images_people_perc_emodb_selfies_weighted.values(), width2, color='blue')
-    ax2.bar_label(rect_mscoco, padding=3)
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(list(wrong_images_people_perc_selfie_weighted.keys()))
-    ax2.set_title('Area occupied by people in wrong prediction images')
-    ax2.legend(loc='upper left')
-    ax2.set_xlabel('percentage of area occupied by people [%]')
-    ax2.set_ylabel('percentage of images [%]')
+    # x = np.arange(len(list(wrong_images_people_perc_mscoco_selfies_weighted.keys())))
+    # rect_mscoco = ax2.bar(x + width1/4, wrong_images_people_perc_mscoco_selfies_weighted.values(), width2, color='green')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # x = np.arange(len(list(wrong_images_people_perc_emodb_selfies_weighted.keys())))
+    # rect_mscoco = ax2.bar(x + width1* 3/4, wrong_images_people_perc_emodb_selfies_weighted.values(), width2, color='blue')
+    # ax2.bar_label(rect_mscoco, padding=3)
+    # ax2.set_xticks(x)
+    # ax2.set_xticklabels(list(wrong_images_people_perc_selfie_weighted.keys()))
+    # ax2.set_title('Area occupied by people in wrong prediction images')
+    # ax2.legend(loc='upper left')
+    # ax2.set_xlabel('percentage of area occupied by people [%]')
+    # ax2.set_ylabel('percentage of images [%]')
     
     
     bottom, top = ax0.get_ylim()
     ax0.set_ylim([bottom, top + top*0.2])
     bottom, top = ax1.get_ylim()
     ax1.set_ylim([bottom, top + top*0.2])
-    bottom, top = ax2.get_ylim()
-    ax2.set_ylim([bottom, top + top*0.2])
+    # bottom, top = ax2.get_ylim()
+    # ax2.set_ylim([bottom, top + top*0.2])
     fig.subplots_adjust(hspace=0.3)
     plt.savefig("{}/bar_chart_nonselfie_wrong_predictions_perc_people_area_weighted_on_single_perc{}{}.svg".format(save_folder, "_with_yolo" if use_yolo else "", "_adjusted_g_truth" if adjust_ground_truth else ""))
     plt.close()
@@ -787,7 +790,7 @@ def calculate_scenes_people_perc_from_SPP(dataset_folder, dataset_version, rando
 
     width0 = 8.0
     rect = ax0.bar(wrong_images_people_perc_total.keys(), 
-                    wrong_images_people_perc_total.values(), width=width0, label='selfie + nonselfie', color='green')
+                    wrong_images_people_perc_total.values(), width=width0, label='selfie + nonselfie', color='orange')
     ax0.bar_label(rect, padding=3)
     ax0.set_xticks(list(wrong_images_people_perc_total.keys()))
     ax0.set_xticklabels(list(wrong_images_people_perc_total.keys()))
@@ -801,7 +804,7 @@ def calculate_scenes_people_perc_from_SPP(dataset_folder, dataset_version, rando
     rect_mscoco = ax1.bar(x - width1/2, wrong_images_people_perc_selfie.values(), width1, label='selfie', color='yellow')
     ax1.bar_label(rect_mscoco, padding=3)
     x = np.arange(len(list(wrong_images_people_perc_nonselfie.keys())))
-    rect_emodb = ax1.bar(x + width1/2, wrong_images_people_perc_nonselfie.values(), width1, label='nonselfie', color='blue')
+    rect_emodb = ax1.bar(x + width1/2, wrong_images_people_perc_nonselfie.values(), width1, label='nonselfie', color='red')
     ax1.bar_label(rect_emodb, padding=3)
     ax1.set_xticks(x)
     ax1.set_xticklabels(list(wrong_images_people_perc_total.keys()))
@@ -827,7 +830,7 @@ def calculate_scenes_people_perc_from_SPP(dataset_folder, dataset_version, rando
         wrong_images_people_perc_total_weighted[key] = round(wrong_images_people_perc_total[key] / len(list(images_with_people_perc.keys())) * 100, 2)
     width0 = 8.0
     rect = ax0.bar(wrong_images_people_perc_total_weighted.keys(), 
-                    wrong_images_people_perc_total_weighted.values(), width=width0, label='selfie + nonselfie', color='green')
+                    wrong_images_people_perc_total_weighted.values(), width=width0, label='selfie + nonselfie', color='orange')
     ax0.bar_label(rect, padding=3)
     ax0.set_xticks(list(wrong_images_people_perc_total_weighted.keys()))
     ax0.set_xticklabels(list(wrong_images_people_perc_total_weighted.keys()))
@@ -847,7 +850,7 @@ def calculate_scenes_people_perc_from_SPP(dataset_folder, dataset_version, rando
     rect_mscoco = ax1.bar(x - width1/2, wrong_images_people_perc_selfie_weighted.values(), width1, label='selfie', color='yellow')
     ax1.bar_label(rect_mscoco, padding=3)
     x = np.arange(len(list(wrong_images_people_perc_nonselfie_weighted.keys())))
-    rect_emodb = ax1.bar(x + width1/2, wrong_images_people_perc_nonselfie_weighted.values(), width1, label='nonselfie', color='blue')
+    rect_emodb = ax1.bar(x + width1/2, wrong_images_people_perc_nonselfie_weighted.values(), width1, label='nonselfie', color='red')
     ax1.bar_label(rect_emodb, padding=3)
     ax1.set_xticks(x)
     ax1.set_xticklabels(list(wrong_images_people_perc_total_weighted.keys()))
@@ -873,7 +876,7 @@ def calculate_scenes_people_perc_from_SPP(dataset_folder, dataset_version, rando
         wrong_images_people_perc_total_weighted[key] = round(wrong_images_people_perc_total[key] / max(images_people_perc_total[key], 1) * 100, 2)
     width0 = 8.0
     rect = ax0.bar(wrong_images_people_perc_total_weighted.keys(), 
-                    wrong_images_people_perc_total_weighted.values(), width=width0, label='selfie + nonselfie', color='green')
+                    wrong_images_people_perc_total_weighted.values(), width=width0, label='selfie + nonselfie', color='orange')
     ax0.bar_label(rect, padding=3)
     ax0.set_xticks(list(wrong_images_people_perc_total_weighted.keys()))
     ax0.set_xticklabels(list(wrong_images_people_perc_total_weighted.keys()))
@@ -893,7 +896,7 @@ def calculate_scenes_people_perc_from_SPP(dataset_folder, dataset_version, rando
     rect_mscoco = ax1.bar(x - width1/2, wrong_images_people_perc_selfie_weighted.values(), width1, label='selfie', color='yellow')
     ax1.bar_label(rect_mscoco, padding=3)
     x = np.arange(len(list(wrong_images_people_perc_nonselfie_weighted.keys())))
-    rect_emodb = ax1.bar(x + width1/2, wrong_images_people_perc_nonselfie_weighted.values(), width1, label='nonselfie', color='blue')
+    rect_emodb = ax1.bar(x + width1/2, wrong_images_people_perc_nonselfie_weighted.values(), width1, label='nonselfie', color='red')
     ax1.bar_label(rect_emodb, padding=3)
     ax1.set_xticks(x)
     ax1.set_xticklabels(list(wrong_images_people_perc_total_weighted.keys()))
@@ -1091,22 +1094,25 @@ def extract_examples(wrong_predictions_file, save_folder, n_examples_per_folder)
             shutil.copy(img_path, perc_sub_folder)
         
 
-def make_SPP_v2_analysis():
+def main():
     # calculate_scenes_false_positives_for_hierarchy_classes('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda/resnet18_pretrained/exp1/train_false_positives')
     # calculate_people_false_positives_for_hierarchy_classes('/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda/resnet18_pretrained/exp1/train_false_positives')
     
     # calculate_EMOTIC_people_perc_from_SPP(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets/EMOTIC/data',
-    #                                         save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/emotic',
-    #                                         wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda/resnet18_pretrained/exp1/train_false_positives/nonselfie_false_positives.txt',
+    #                                         save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/analysis_people_vs_scenes/emotic',
+    #                                         wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda_old/resnet18_pretrained/exp1/train_false_positives/nonselfie_false_positives.txt',
     #                                         use_yolo=True,
     #                                         adjust_ground_truth=False)
-    # calculate_scenes_people_perc_from_SPP(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
-    #                                 dataset_version=2, randomize_metadata=False,
-    #                                 save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/sun397',
-    #                                 wrong_predictions_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda/resnet18_pretrained/exp1/train_false_positives')
-    extract_examples(wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/emotic/wrong_predictions_with_people_perc_with_yolo.json', 
-                    save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/emotic_examples',
-                    n_examples_per_folder=7)
-    extract_examples(wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/sun397/wrong_predictions_with_people_perc.json',
-                    save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/sun397_examples', 
-                    n_examples_per_folder=7)
+    calculate_scenes_people_perc_from_SPP(dataset_folder='/scratch/work/Tesi/LucaPiano/spice/code/experiments_singlegpu/datasets',
+                                    dataset_version=2, randomize_metadata=False,
+                                    save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/analysis_people_vs_scenes/sun397',
+                                    wrong_predictions_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/lda_old/resnet18_pretrained/exp1/train_false_positives')
+    # extract_examples(wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/emotic/wrong_predictions_with_people_perc_with_yolo.json', 
+    #                 save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/emotic_examples',
+    #                 n_examples_per_folder=7)
+    # extract_examples(wrong_predictions_file='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/sun397/wrong_predictions_with_people_perc.json',
+    #                 save_folder='/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/analysis_people_vs_scenes/sun397_examples', 
+    #                 n_examples_per_folder=7)
+
+if __name__ == '__main__':
+    main()

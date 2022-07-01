@@ -143,7 +143,7 @@ def main():
         # which gave pair augmentation of image
         pair_train_dataset = SocialProfilePicturesPair(version=cfg.dataset.version, randomize_metadata=cfg.dataset.randomize_metadata, root=args.dataset_folder, split="train", 
                                     transform=transforms.Compose(
-                                                [PadToSquare() if cfg.dataset.train_padding else DoNothing(),    # apply padding to make images squared without
+                                                [PadToSquare() if cfg.dataset.train_padding else DoNothing(),   
                                                 transforms.Resize([cfg.dataset.img_size, cfg.dataset.img_size]) if cfg.dataset.train_resize else DoNothing()] +
                                                 mocov2_augmentation))
 

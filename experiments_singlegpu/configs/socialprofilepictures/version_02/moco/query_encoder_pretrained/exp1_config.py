@@ -9,6 +9,9 @@ dataset = dict(
     test_resize = True,
 )
 
+model = "resnet18"
+model_path = "/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/moco/query_encoder_pretrained/exp1/checkpoints/checkpoint_last.pth.tar"
+
 moco = dict(
     moco_dim=128,
     moco_k=4096,

@@ -1,6 +1,3 @@
-"""
-    Example of moco training config file
-"""
 dataset = dict(
     version=2,
     randomize_metadata=False,
@@ -11,6 +8,9 @@ dataset = dict(
     test_padding = True,
     test_resize = True,
 )
+
+model = "resnet18"
+model_path = "/scratch/work/Tesi/LucaPiano/spice/results/socialprofilepictures/version_02/moco/from_scratch/exp4/checkpoints/checkpoint_last.pth.tar"
 
 moco = dict(
     moco_dim=128,
